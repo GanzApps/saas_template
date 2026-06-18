@@ -1,0 +1,16 @@
+name = "saas-api"
+main = "src/index.ts"
+compatibility_date = "2024-06-17"
+compatibility_flags = ["nodejs_compat"]
+
+[vars]
+NODE_ENV = "production"
+
+# Secrets set via: wrangler secret put <NAME>
+# CLERK_SECRET_KEY
+# CLERK_JWKS_URL
+# SUPABASE_URL
+# SUPABASE_SERVICE_ROLE_KEY
+# DATABASE_URL
+# STRIPE_SECRET_KEY
+# STRIPE_WEBHOOK_SECRET

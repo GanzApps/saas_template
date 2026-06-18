@@ -1,0 +1,12 @@
+{
+  "extends": "@saas/tsconfig/node.json",
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@saas/config": ["../../packages/config/src"],
+      "@saas/db": ["../../packages/db/src"]
+    }
+  },
+  "include": ["src/**/*"],
+  "exclude": ["node_modules", "dist"]
+}

@@ -1,0 +1,31 @@
+project_id = "your-project-ref"
+
+[api]
+enabled = true
+port = 54321
+
+[auth]
+enabled = false  # Clerk handles auth
+
+[db]
+enabled = true
+major_version = 15
+
+[realtime]
+enabled = true
+
+[storage]
+enabled = true
+
+[edge_functions]
+enabled = true
+
+[studio]
+enabled = true
+port = 54323
+
+[functions]
+  # Clerk webhook handler
+  [functions.clerk-webhook]
+  enabled = true
+  verify_jwt = false

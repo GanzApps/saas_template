@@ -1,0 +1,14 @@
+{
+  "extends": "@saas/tsconfig/node.json",
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@saas/config": ["../../packages/config/src"],
+      "@saas/db": ["../../packages/db/src"],
+      "@saas/ui": ["../../packages/ui/src"]
+    },
+    "types": ["@cloudflare/workers-types"]
+  },
+  "include": ["src/**/*", "worker-configuration.d.ts"],
+  "exclude": ["node_modules", "dist"]
+}

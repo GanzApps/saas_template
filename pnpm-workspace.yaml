@@ -1,0 +1,43 @@
+packages:
+  - "apps/*"
+  - "packages/*"
+
+catalog:
+  # Core
+  typescript: ^5.4.0
+  zod: ^3.22.0
+  # Frontend
+  next: ^14.2.0
+  react: ^18.3.0
+  react-dom: ^18.3.0
+  "@clerk/nextjs": ^5.0.0
+  "@clerk/clerk-sdk-node": ^4.13.0
+  "@supabase/supabase-js": ^2.39.0
+  "@supabase/ssr": ^0.3.0
+  "@tanstack/react-query": ^5.28.0
+  tailwindcss: ^3.4.0
+  postcss: ^8.4.0
+  autoprefixer: ^10.4.0
+  # API
+  hono: ^4.2.0
+  "@hono/clerk-auth": ^1.0.0
+  "@hono/zod-validator": ^0.2.0
+  "@supabase/node-fetch": ^2.6.0
+  # Dev
+  vitest: ^1.4.0
+  "@vitest/coverage-v8": ^1.4.0
+  "@types/node": ^20.11.0
+  "@types/react": ^18.2.0
+  "@types/react-dom": ^18.2.0
+  eslint: ^8.57.0
+  prettier: ^3.2.0
+  # Cloudflare
+  wrangler: ^3.47.0
+  "@cloudflare/workers-types": ^4.20240000.0
+  # Supabase
+  supabase: ^1.150.0
+  # Google APIs
+  googleapis: ^133.0.0
+  # Communications
+  twilio: ^5.0.0
+  resend: ^3.2.0
