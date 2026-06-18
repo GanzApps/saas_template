@@ -45,7 +45,7 @@ jobs:
         with:
           apiToken: ${{ secrets.CF_API_TOKEN }}
           accountId: ${{ secrets.CF_ACCOUNT_ID }}
-          projectName: reviewflow-frontend
+          projectName: filevault-frontend
           directory: apps/web/dist
           branch: production
           wranglerVersion: '3'

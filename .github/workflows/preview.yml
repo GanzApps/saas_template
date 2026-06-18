@@ -45,7 +45,7 @@ jobs:
         with:
           apiToken: ${{ secrets.CF_API_TOKEN }}
           accountId: ${{ secrets.CF_ACCOUNT_ID }}
-          projectName: reviewflow-frontend
+          projectName: filevault-frontend
           directory: apps/web/dist
           branch: preview-${{ github.event.number }}
           wranglerVersion: '3'
@@ -57,7 +57,7 @@ jobs:
           message: |
             🔗 **Preview Deployment Ready**
             
-            Frontend: https://preview-${{ github.event.number }}.reviewflow-frontend.pages.dev
+            Frontend: https://preview-${{ github.event.number }}.filevault-frontend.pages.dev
             
             This preview will update automatically with new commits to this PR.
 
@@ -92,19 +92,13 @@ jobs:
           CF_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
           CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
           CLERK_SECRET_KEY: ${{ secrets.CLERK_SECRET_KEY }}
-          GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
-          GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
-          ENCRYPTION_KEY: ${{ secrets.ENCRYPTION_KEY }}
 
       - name: Deploy API Preview (dry-run)
         working-directory: ./apps/api
         run: |
           wrangler deploy --dry-run \
             --env preview-${{ github.event.number }} \
-            --var CLERK_SECRET_KEY:${{ secrets.CLERK_SECRET_KEY }} \
-            --var GOOGLE_CLIENT_ID:${{ secrets.GOOGLE_CLIENT_ID }} \
-            --var GOOGLE_CLIENT_SECRET:${{ secrets.GOOGLE_CLIENT_SECRET }} \
-            --var ENCRYPTION_KEY:${{ secrets.ENCRYPTION_KEY }}
+            --var CLERK_SECRET_KEY:${{ secrets.CLERK_SECRET_KEY }}
         env:
           CF_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
           CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}

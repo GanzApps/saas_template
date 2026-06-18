@@ -1,4 +1,4 @@
-name = "reviewflow-api"
+name = "filevault-api"
 main = "src/index.ts"
 compatibility_date = "2024-06-17"
 compatibility_flags = ["nodejs_compat"]
@@ -10,27 +10,20 @@ NODE_ENV = "production"
 # D1 Database binding
 [[d1_databases]]
 binding = "DB"
-database_name = "reviewflow-db"
-database_id = "your-database-id-here"
+database_name = "filevault-db"
+database_id = "2b79c7d0-b19b-488f-adb2-133f63abb328"
+migrations_dir = "../../packages/db-d1/migrations"
 
-# R2 Bucket binding for file storage
+# R2 Bucket binding
 [[r2_buckets]]
-binding = "REVIEWFLOW_BUCKET"
-bucket_name = "reviewflow-assets"
+binding = "FILEVAULT_BUCKET"
+bucket_name = "filevault-files"
 
 # Secrets set via: wrangler secret put <NAME>
 # CLERK_SECRET_KEY
 # CLERK_JWKS_URL
-# GOOGLE_CLIENT_ID
-# GOOGLE_CLIENT_SECRET
-# GOOGLE_REDIRECT_URI
-# ENCRYPTION_KEY
-# TWILIO_ACCOUNT_SID
-# TWILIO_AUTH_TOKEN
-# TWILIO_WEBHOOK_SECRET
-# TWILIO_PHONE_NUMBER
-# RESEND_API_KEY
-# RESEND_WEBHOOK_SECRET
-# STRIPE_SECRET_KEY
-# STRIPE_WEBHOOK_SECRET
 # CLERK_WEBHOOK_SECRET
+# NEXT_PUBLIC_APP_URL (non-secret but env-specific)
+# NEXT_PUBLIC_API_URL (non-secret but env-specific)
+# NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY
+# CF_R2_PUBLIC_URL  (optional — public R2 domain)

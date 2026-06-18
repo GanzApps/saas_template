@@ -1,13 +1,27 @@
 {
-  "extends": "@saas/tsconfig/node.json",
+  "$schema": "https://json.schemastore.org/tsconfig",
   "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "strict": true,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "isolatedModules": false,
+    "verbatimModuleSyntax": false,
+    "noEmit": true,
+    "jsx": "preserve",
+    "incremental": true,
     "baseUrl": ".",
     "paths": {
       "@saas/config": ["../../packages/config/src"],
-      "@saas/db": ["../../packages/db/src"],
-      "@saas/ui": ["../../packages/ui/src"]
-    },
-    "types": ["@cloudflare/workers-types"]
+      "@saas/db-d1": ["../../packages/db-d1/src"],
+      "@saas/storage": ["../../packages/storage/src"]
+    }
   },
   "include": ["src/**/*", "worker-configuration.d.ts"],
   "exclude": ["node_modules", "dist"]

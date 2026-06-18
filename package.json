@@ -17,7 +17,11 @@
   },
   "devDependencies": {
     "@turbo/gen": "^1.13.0",
+    "@typescript-eslint/eslint-plugin": "^8.61.1",
+    "@typescript-eslint/parser": "^8.61.1",
     "eslint": "^8.57.0",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-react-hooks": "^7.1.1",
     "husky": "^9.0.0",
     "prettier": "^3.2.0",
     "turbo": "^2.0.0",
@@ -50,9 +54,12 @@
     "prettier": "^3.2.0",
     "wrangler": "^3.47.0",
     "@cloudflare/workers-types": "^4.20240405.0",
-    "googleapis": "^133.0.0",
-    "twilio": "^5.0.0",
-    "resend": "^3.2.0",
     "svix": "^1.24.0"
+  },
+  "dependencies": {
+    "@clerk/backend": "1.10.0",
+    "@cloudflare/workers-types": "^4.20240405.0",
+    "@hono/clerk-auth": "^3.1.1",
+    "hono": "4.6.15"
   }
 }

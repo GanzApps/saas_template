@@ -3,12 +3,33 @@
   "compilerOptions": {
     "baseUrl": ".",
     "paths": {
-      "@saas/config": ["../../packages/config/src"],
-      "@saas/db-d1": ["../../packages/db-d1/src"],
-      "@saas/ui": ["../../packages/ui/src"]
+      "@saas/config": [
+        "../../packages/config/src"
+      ],
+      "@saas/db-d1": [
+        "../../packages/db-d1/src"
+      ],
+      "@saas/ui": [
+        "../../packages/ui/src"
+      ],
+      "@/*": [
+        "./src/*"
+      ]
     },
-    "plugins": [{ "name": "next" }]
+    "plugins": [
+      {
+        "name": "next"
+      }
+    ],
+    "jsx": "preserve"
   },
-  "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
-  "exclude": ["node_modules"]
+  "include": [
+    "next-env.d.ts",
+    "**/*.ts",
+    "**/*.tsx",
+    ".next/types/**/*.ts"
+  ],
+  "exclude": [
+    "node_modules"
+  ]
 }

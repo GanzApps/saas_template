@@ -9,32 +9,25 @@
     "deploy:preview": "wrangler deploy",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src/",
-    "test": "vitest run",
-    "test:ci": "vitest run --coverage"
+    "test": "vitest run"
   },
   "dependencies": {
-    "hono": "^4.2.0",
-    "@hono/clerk-auth": "^1.0.0",
+    "hono": "^4.6.15",
+    "@hono/clerk-auth": "^3.1.1",
     "@hono/zod-validator": "^0.2.0",
     "@saas/config": "workspace:*",
     "@saas/db-d1": "workspace:*",
-    "@saas/google": "workspace:*",
-    "@saas/communications": "workspace:*",
     "@saas/storage": "workspace:*",
     "zod": "^3.22.0",
-    "googleapis": "^133.0.0",
-    "twilio": "^5.0.0",
-    "resend": "^3.2.0",
     "svix": "^1.24.0"
   },
   "devDependencies": {
-    "@saas/tsconfig": "workspace:*",
     "@cloudflare/workers-types": "^4.20240405.0",
+    "@saas/tsconfig": "workspace:*",
     "@types/node": "^20.11.0",
     "eslint": "^8.57.0",
     "typescript": "^5.4.0",
     "vitest": "^1.4.0",
-    "@vitest/coverage-v8": "^1.4.0",
     "wrangler": "^3.47.0"
   }
 }

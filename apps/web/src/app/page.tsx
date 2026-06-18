@@ -1,12 +1,12 @@
 import Link from 'next/link'
 import { Button } from '@saas/ui'
-import { ArrowRight, CheckCircle, Zap, Shield, BarChart } from 'lucide-react'
+import { ArrowRight, CheckCircle, Zap, Shield, Share2, FolderOpen } from 'lucide-react'
 
 const features = [
-  { icon: Zap, title: 'Lightning Fast', desc: 'Edge-deployed API with Cloudflare Workers' },
-  { icon: Shield, title: 'Secure by Default', desc: 'Clerk auth + Supabase RLS policies' },
-  { icon: BarChart, title: 'Real-time Data', desc: 'Supabase Realtime subscriptions' },
-  { icon: CheckCircle, title: 'Type-Safe', desc: 'End-to-end TypeScript from DB to UI' },
+  { icon: FolderOpen, title: 'Cloud Storage', desc: 'Files stored in Cloudflare R2, served from the edge' },
+  { icon: Share2, title: 'Shareable Links', desc: 'Generate expiring links with optional download limits' },
+  { icon: Shield, title: 'Org-Scoped', desc: 'Clerk authentication keeps your team’s files isolated' },
+  { icon: Zap, title: 'Direct Uploads', desc: 'Files stream straight to R2 via presigned Worker URLs' },
 ]
 
 export default function HomePage() {
@@ -16,11 +16,11 @@ export default function HomePage() {
       <section className="flex-1 flex items-center justify-center px-4 py-20 bg-gradient-to-b from-background to-muted/50">
         <div className="max-w-4xl w-full text-center">
           <h1 className="mb-6 text-4xl font-bold tracking-tight sm:text-6xl">
-            Build SaaS <span className="text-primary">Faster</span>
+            FileVault <span className="text-primary">Share</span>
           </h1>
           <p className="mb-10 text-lg text-muted-foreground max-w-2xl mx-auto">
-            Production-ready stack: Next.js 14 + Clerk + Supabase + Cloudflare Workers.
-            Type-safe from database to UI. Deploy in minutes.
+            Secure file storage and sharing for teams. Upload, organize, and share
+            with expiring links — all on Cloudflare&rsquo;s edge.
           </p>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
             <Link href="/sign-up">
@@ -63,8 +63,8 @@ export default function HomePage() {
           <div className="flex flex-wrap items-center justify-center gap-4 text-sm text-muted-foreground">
             <span className="px-3 py-1 rounded bg-background border">Next.js 14</span>
             <span className="px-3 py-1 rounded bg-background border">Clerk</span>
-            <span className="px-3 py-1 rounded bg-background border">Supabase</span>
-            <span className="px-3 py-1 rounded bg-background border">Cloudflare Workers</span>
+            <span className="px-3 py-1 rounded bg-background border">Cloudflare D1</span>
+            <span className="px-3 py-1 rounded bg-background border">Cloudflare R2</span>
             <span className="px-3 py-1 rounded bg-background border">Hono</span>
             <span className="px-3 py-1 rounded bg-background border">Turborepo</span>
             <span className="px-3 py-1 rounded bg-background border">Tailwind CSS</span>
@@ -76,7 +76,7 @@ export default function HomePage() {
       {/* Footer */}
       <footer className="py-8 px-4 border-t">
         <div className="max-w-6xl mx-auto text-center text-sm text-muted-foreground">
-          <p>SaaS MVP — Built for speed, deployed with confidence.</p>
+          <p>FileVault — Secure file sharing on the edge.</p>
         </div>
       </footer>
     </main>

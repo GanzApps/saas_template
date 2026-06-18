@@ -40,23 +40,11 @@ jobs:
           wrangler deploy --env production \
             --var CLERK_SECRET_KEY:${{ secrets.CLERK_SECRET_KEY }} \
             --var CLERK_JWKS_URL:${{ secrets.CLERK_JWKS_URL }} \
-            --var GOOGLE_CLIENT_ID:${{ secrets.GOOGLE_CLIENT_ID }} \
-            --var GOOGLE_CLIENT_SECRET:${{ secrets.GOOGLE_CLIENT_SECRET }} \
-            --var GOOGLE_OAUTH_REDIRECT_URI:${{ secrets.GOOGLE_OAUTH_REDIRECT_URI }} \
-            --var ENCRYPTION_KEY:${{ secrets.ENCRYPTION_KEY }} \
-            --var TWILIO_ACCOUNT_SID:${{ secrets.TWILIO_ACCOUNT_SID }} \
-            --var TWILIO_AUTH_TOKEN:${{ secrets.TWILIO_AUTH_TOKEN }} \
-            --var TWILIO_WEBHOOK_SECRET:${{ secrets.TWILIO_WEBHOOK_SECRET }} \
-            --var TWILIO_MESSAGING_SERVICE_SID:${{ secrets.TWILIO_MESSAGING_SERVICE_SID }} \
-            --var RESEND_API_KEY:${{ secrets.RESEND_API_KEY }} \
-            --var RESEND_WEBHOOK_SECRET:${{ secrets.RESEND_WEBHOOK_SECRET }} \
-            --var RESEND_FROM_EMAIL:${{ secrets.RESEND_FROM_EMAIL }} \
-            --var STRIPE_SECRET_KEY:${{ secrets.STRIPE_SECRET_KEY }} \
-            --var STRIPE_WEBHOOK_SECRET:${{ secrets.STRIPE_WEBHOOK_SECRET }} \
             --var CLERK_WEBHOOK_SECRET:${{ secrets.CLERK_WEBHOOK_SECRET }} \
-            --var CF_D1_DATABASE_NAME:reviewflow-db \
-            --var CF_R2_BUCKET_NAME:reviewflow-assets
-
+            --var NEXT_PUBLIC_APP_URL:${{ secrets.NEXT_PUBLIC_APP_URL }} \
+            --var NEXT_PUBLIC_API_URL:${{ secrets.NEXT_PUBLIC_API_URL }} \
+            --var CF_D1_DATABASE_NAME:filevault-db \
+            --var CF_R2_BUCKET_NAME:filevault-files
 
   deploy-api-preview:
     name: Deploy Cloudflare Workers Preview
@@ -88,17 +76,8 @@ jobs:
           wrangler deploy --env preview \
             --var CLERK_SECRET_KEY:${{ secrets.CLERK_SECRET_KEY }} \
             --var CLERK_JWKS_URL:${{ secrets.CLERK_JWKS_URL }} \
-            --var GOOGLE_CLIENT_ID:${{ secrets.GOOGLE_CLIENT_ID }} \
-            --var GOOGLE_CLIENT_SECRET:${{ secrets.GOOGLE_CLIENT_SECRET }} \
-            --var GOOGLE_OAUTH_REDIRECT_URI:${{ secrets.GOOGLE_OAUTH_REDIRECT_URI }} \
-            --var ENCRYPTION_KEY:${{ secrets.ENCRYPTION_KEY }} \
-            --var TWILIO_ACCOUNT_SID:${{ secrets.TWILIO_ACCOUNT_SID }} \
-            --var TWILIO_AUTH_TOKEN:${{ secrets.TWILIO_AUTH_TOKEN }} \
-            --var TWILIO_WEBHOOK_SECRET:${{ secrets.TWILIO_WEBHOOK_SECRET }} \
-            --var TWILIO_MESSAGING_SERVICE_SID:${{ secrets.TWILIO_MESSAGING_SERVICE_SID }} \
-            --var RESEND_API_KEY:${{ secrets.RESEND_API_KEY }} \
-            --var RESEND_WEBHOOK_SECRET:${{ secrets.RESEND_WEBHOOK_SECRET }} \
-            --var RESEND_FROM_EMAIL:${{ secrets.RESEND_FROM_EMAIL }} \
-            --var STRIPE_SECRET_KEY:${{ secrets.STRIPE_SECRET_KEY }} \
-            --var STRIPE_WEBHOOK_SECRET:${{ secrets.STRIPE_WEBHOOK_SECRET }} \
-            --var CLERK_WEBHOOK_SECRET:${{ secrets.CLERK_WEBHOOK_SECRET }}
+            --var CLERK_WEBHOOK_SECRET:${{ secrets.CLERK_WEBHOOK_SECRET }} \
+            --var NEXT_PUBLIC_APP_URL:${{ secrets.NEXT_PUBLIC_APP_URL }} \
+            --var NEXT_PUBLIC_API_URL:${{ secrets.NEXT_PUBLIC_API_URL }} \
+            --var CF_D1_DATABASE_NAME:filevault-db \
+            --var CF_R2_BUCKET_NAME:filevault-files

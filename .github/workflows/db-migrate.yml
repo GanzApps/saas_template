@@ -3,7 +3,7 @@ name: Database Migrations
 on:
   push:
     paths:
-      - 'packages/db/d1/migrations/**'
+      - 'packages/db-d1/migrations/**'
   workflow_dispatch:
 
 env:
@@ -38,26 +38,13 @@ jobs:
       - name: Apply D1 Migrations (Production)
         run: |
           echo "Applying migrations to D1 database..."
-          for file in packages/db/d1/migrations/*.sql; do
+          for file in packages/db-d1/migrations/*.sql; do
             echo "Applying $file..."
-            wrangler d1 execute reviewflow-db --remote --file="$file"
+            wrangler d1 execute filevault-db --remote --file="$file"
           done
         env:
           CF_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
           CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
-
-      - name: Generate TypeScript types from D1
-        run: |
-          echo "Generating types from D1 schema..."
-          wrangler d1 execute reviewflow-db --remote --command=".schema" > /tmp/schema.sql
-          # TODO: Implement D1 type generation (or keep manual types in @saas/db-d1)
-
-      - name: Commit generated types (if any)
-        if: github.event_name == 'push'
-        run: |
-          # Types are maintained manually in packages/db-d1/src/types.ts
-          # This step is a placeholder for future automation
-          echo "Type generation complete (manual maintenance)"
 
   migrate-preview:
     name: Run D1 Migrations (Preview)
@@ -85,9 +72,9 @@ jobs:
       - name: Apply D1 Migrations (Preview)
         run: |
           echo "Applying migrations to D1 preview database..."
-          for file in packages/db/d1/migrations/*.sql; do
+          for file in packages/db-d1/migrations/*.sql; do
             echo "Applying $file..."
-            wrangler d1 execute reviewflow-db --local --file="$file"
+            wrangler d1 execute filevault-db --local --file="$file"
           done
         env:
           CF_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}

@@ -7,7 +7,7 @@ vi.mock('@clerk/nextjs', () => ({
   useUser: () => ({ user: { id: 'user_test123', firstName: 'Test', lastName: 'User', fullName: 'Test User', primaryEmailAddress: { emailAddress: 'test@example.com' }, imageUrl: null } }),
   SignIn: () => <div data-testid="sign-in">Sign In</div>,
   SignUp: () => <div data-testid="sign-up">Sign Up</div>,
-  SignOutButton: ({ children }) => <button data-testid="sign-out">{children}</button>,
+  SignOutButton: ({ children }: { children: React.ReactNode }) => <button data-testid="sign-out">{children}</button>,
 }))
 
 // Mock D1 client
