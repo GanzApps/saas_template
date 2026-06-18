@@ -8,7 +8,6 @@
     "deploy": "wrangler deploy --env production",
     "deploy:preview": "wrangler deploy",
     "typecheck": "tsc --noEmit",
-    "lint": "eslint src/",
     "test": "vitest run"
   },
   "dependencies": {
