@@ -10,7 +10,7 @@
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:ci": "vitest run --coverage"
+    "test:ci": "vitest run"
   },
   "dependencies": {
     "@clerk/nextjs": "^5.0.0",
