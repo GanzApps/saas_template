@@ -82,7 +82,6 @@ jobs:
           cache: 'pnpm'
 
       - name: Install dependencies
-        working-directory: ./apps/api
         run: pnpm install --frozen-lockfile
 
       - name: Build API
@@ -96,7 +95,7 @@ jobs:
       - name: Deploy API Preview (dry-run)
         working-directory: ./apps/api
         run: |
-          wrangler deploy --dry-run \
+          npx wrangler deploy --dry-run \
             --env preview-${{ github.event.number }} \
             --var CLERK_SECRET_KEY:${{ secrets.CLERK_SECRET_KEY }}
         env:

@@ -40,7 +40,7 @@ jobs:
           echo "Applying migrations to D1 database..."
           for file in packages/db-d1/migrations/*.sql; do
             echo "Applying $file..."
-            wrangler d1 execute filevault-db --remote --file="$file"
+            npx wrangler d1 execute filevault-db --remote --file="$file"
           done
         env:
           CF_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
@@ -74,7 +74,7 @@ jobs:
           echo "Applying migrations to D1 preview database..."
           for file in packages/db-d1/migrations/*.sql; do
             echo "Applying $file..."
-            wrangler d1 execute filevault-db --local --file="$file"
+            npx wrangler d1 execute filevault-db --local --file="$file"
           done
         env:
           CF_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}

@@ -31,13 +31,12 @@ jobs:
           cache: 'pnpm'
 
       - name: Install dependencies
-        working-directory: ./apps/api
         run: pnpm install --frozen-lockfile
 
       - name: Deploy to Cloudflare Workers
         working-directory: ./apps/api
         run: |
-          wrangler deploy --env production \
+          npx wrangler deploy --env production \
             --var CLERK_SECRET_KEY:${{ secrets.CLERK_SECRET_KEY }} \
             --var CLERK_JWKS_URL:${{ secrets.CLERK_JWKS_URL }} \
             --var CLERK_WEBHOOK_SECRET:${{ secrets.CLERK_WEBHOOK_SECRET }} \
@@ -67,13 +66,12 @@ jobs:
           cache: 'pnpm'
 
       - name: Install dependencies
-        working-directory: ./apps/api
         run: pnpm install --frozen-lockfile
 
       - name: Deploy to Cloudflare Workers Preview
         working-directory: ./apps/api
         run: |
-          wrangler deploy --env preview \
+          npx wrangler deploy --env preview \
             --var CLERK_SECRET_KEY:${{ secrets.CLERK_SECRET_KEY }} \
             --var CLERK_JWKS_URL:${{ secrets.CLERK_JWKS_URL }} \
             --var CLERK_WEBHOOK_SECRET:${{ secrets.CLERK_WEBHOOK_SECRET }} \
