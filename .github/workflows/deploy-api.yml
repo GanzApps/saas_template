@@ -13,7 +13,7 @@ jobs:
   deploy-api:
     name: Deploy Cloudflare Workers Production
     runs-on: ubuntu-latest
-    if: ${{ secrets.CF_API_TOKEN != '' }}
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -31,19 +31,74 @@ jobs:
           cache: 'pnpm'
 
       - name: Install dependencies
+        working-directory: ./apps/api
         run: pnpm install --frozen-lockfile
 
       - name: Deploy to Cloudflare Workers
+        working-directory: ./apps/api
         run: |
-          cd apps/api
-          npx wrangler deploy --env production
-        env:
-          CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
-          CF_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
-          CLERK_SECRET_KEY: ${{ secrets.CLERK_SECRET_KEY }}
-          CLERK_JWKS_URL: ${{ secrets.CLERK_JWKS_URL }}
-          SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
-          STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
-          STRIPE_WEBHOOK_SECRET: ${{ secrets.STRIPE_WEBHOOK_SECRET }}
+          wrangler deploy --env production \
+            --var CLERK_SECRET_KEY:${{ secrets.CLERK_SECRET_KEY }} \
+            --var CLERK_JWKS_URL:${{ secrets.CLERK_JWKS_URL }} \
+            --var GOOGLE_CLIENT_ID:${{ secrets.GOOGLE_CLIENT_ID }} \
+            --var GOOGLE_CLIENT_SECRET:${{ secrets.GOOGLE_CLIENT_SECRET }} \
+            --var GOOGLE_OAUTH_REDIRECT_URI:${{ secrets.GOOGLE_OAUTH_REDIRECT_URI }} \
+            --var ENCRYPTION_KEY:${{ secrets.ENCRYPTION_KEY }} \
+            --var TWILIO_ACCOUNT_SID:${{ secrets.TWILIO_ACCOUNT_SID }} \
+            --var TWILIO_AUTH_TOKEN:${{ secrets.TWILIO_AUTH_TOKEN }} \
+            --var TWILIO_WEBHOOK_SECRET:${{ secrets.TWILIO_WEBHOOK_SECRET }} \
+            --var TWILIO_MESSAGING_SERVICE_SID:${{ secrets.TWILIO_MESSAGING_SERVICE_SID }} \
+            --var RESEND_API_KEY:${{ secrets.RESEND_API_KEY }} \
+            --var RESEND_WEBHOOK_SECRET:${{ secrets.RESEND_WEBHOOK_SECRET }} \
+            --var RESEND_FROM_EMAIL:${{ secrets.RESEND_FROM_EMAIL }} \
+            --var STRIPE_SECRET_KEY:${{ secrets.STRIPE_SECRET_KEY }} \
+            --var STRIPE_WEBHOOK_SECRET:${{ secrets.STRIPE_WEBHOOK_SECRET }} \
+            --var CLERK_WEBHOOK_SECRET:${{ secrets.CLERK_WEBHOOK_SECRET }} \
+            --var CF_D1_DATABASE_NAME:reviewflow-db \
+            --var CF_R2_BUCKET_NAME:reviewflow-assets
+
+
+  deploy-api-preview:
+    name: Deploy Cloudflare Workers Preview
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v3
+        with:
+          version: 9
+          run_install: false
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        working-directory: ./apps/api
+        run: pnpm install --frozen-lockfile
+
+      - name: Deploy to Cloudflare Workers Preview
+        working-directory: ./apps/api
+        run: |
+          wrangler deploy --env preview \
+            --var CLERK_SECRET_KEY:${{ secrets.CLERK_SECRET_KEY }} \
+            --var CLERK_JWKS_URL:${{ secrets.CLERK_JWKS_URL }} \
+            --var GOOGLE_CLIENT_ID:${{ secrets.GOOGLE_CLIENT_ID }} \
+            --var GOOGLE_CLIENT_SECRET:${{ secrets.GOOGLE_CLIENT_SECRET }} \
+            --var GOOGLE_OAUTH_REDIRECT_URI:${{ secrets.GOOGLE_OAUTH_REDIRECT_URI }} \
+            --var ENCRYPTION_KEY:${{ secrets.ENCRYPTION_KEY }} \
+            --var TWILIO_ACCOUNT_SID:${{ secrets.TWILIO_ACCOUNT_SID }} \
+            --var TWILIO_AUTH_TOKEN:${{ secrets.TWILIO_AUTH_TOKEN }} \
+            --var TWILIO_WEBHOOK_SECRET:${{ secrets.TWILIO_WEBHOOK_SECRET }} \
+            --var TWILIO_MESSAGING_SERVICE_SID:${{ secrets.TWILIO_MESSAGING_SERVICE_SID }} \
+            --var RESEND_API_KEY:${{ secrets.RESEND_API_KEY }} \
+            --var RESEND_WEBHOOK_SECRET:${{ secrets.RESEND_WEBHOOK_SECRET }} \
+            --var RESEND_FROM_EMAIL:${{ secrets.RESEND_FROM_EMAIL }} \
+            --var STRIPE_SECRET_KEY:${{ secrets.STRIPE_SECRET_KEY }} \
+            --var STRIPE_WEBHOOK_SECRET:${{ secrets.STRIPE_WEBHOOK_SECRET }} \
+            --var CLERK_WEBHOOK_SECRET:${{ secrets.CLERK_WEBHOOK_SECRET }}

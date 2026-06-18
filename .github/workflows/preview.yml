@@ -9,9 +9,10 @@ env:
   TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
 
 jobs:
-  preview:
-    name: Deploy Preview
+  build-and-preview-frontend:
+    name: Build & Preview Frontend
     runs-on: ubuntu-latest
+    if: github.actor != 'dependabot[bot]'
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -31,74 +32,79 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Generate DB types
-        run: pnpm db:types
-        env:
-          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-
-      - name: Build Frontend (Vercel)
-        run: pnpm build
-        env:
-          NEXT_PUBLIC_APP_URL: ${{ secrets.NEXT_PUBLIC_APP_URL }}
-          NEXT_PUBLIC_API_URL: ${{ secrets.NEXT_PUBLIC_API_URL }}
-          NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ secrets.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY }}
-          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
-          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
-
-      - name: Build Frontend (Cloudflare Pages)
+      - name: Build frontend
+        working-directory: ./apps/web
         run: pnpm build:cloudflare
         env:
           NEXT_PUBLIC_APP_URL: ${{ secrets.NEXT_PUBLIC_APP_URL }}
           NEXT_PUBLIC_API_URL: ${{ secrets.NEXT_PUBLIC_API_URL }}
           NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ secrets.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY }}
-          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
-          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
-
-      - name: Deploy to Vercel Preview
-        uses: amondnet/vercel-action@v25
-        if: ${{ secrets.VERCEL_TOKEN != '' }}
-        with:
-          vercel-token: ${{ secrets.VERCEL_TOKEN }}
-          vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
-          vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID }}
-          vercel-args: '--prod=false'
-          working-directory: ./apps/web
 
       - name: Deploy to Cloudflare Pages Preview
         uses: cloudflare/pages-action@v1
-        if: ${{ secrets.CF_API_TOKEN != '' && secrets.CF_ACCOUNT_ID != '' }}
         with:
           apiToken: ${{ secrets.CF_API_TOKEN }}
           accountId: ${{ secrets.CF_ACCOUNT_ID }}
           projectName: reviewflow-frontend
-          directory: apps/web/out
-          branch: preview-${{ github.event.pull_request.number }}
+          directory: apps/web/dist
+          branch: preview-${{ github.event.number }}
           wranglerVersion: '3'
 
-      - name: Deploy Cloudflare Workers Preview (API)
-        if: ${{ secrets.CF_API_TOKEN != '' }}
-        run: |
-          cd apps/api
-          npx wrangler deploy --env preview
-        env:
-          CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
-          CF_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
-
-      - name: Comment PR with Preview URLs
-        if: ${{ github.event_name == 'pull_request' }}
-        uses: actions/github-script@v7
+      - name: Comment PR with preview URL
+        uses: thollender/CommentPR@v2
         with:
-          script: |
-            const pr = ${{ toJson(github.event.pull_request) }};
-            const body = `## 🚀 Preview Deployments
-            - **Frontend (Vercel):** https://<preview-url>.vercel.app
-            - **Frontend (Cloudflare Pages):** https://preview-${{ github.event.pull_request.number }}.reviewflow-frontend.pages.dev
-            - **API (Cloudflare Workers):** https://<worker-preview>.<account>.workers.dev
-            `;
-            await github.rest.issues.createComment({
-              issue_number: pr.number,
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              body
-            });
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          message: |
+            🔗 **Preview Deployment Ready**
+            
+            Frontend: https://preview-${{ github.event.number }}.reviewflow-frontend.pages.dev
+            
+            This preview will update automatically with new commits to this PR.
+
+  build-and-preview-api:
+    name: Build & Preview API
+    runs-on: ubuntu-latest
+    if: github.actor != 'dependabot[bot]'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v3
+        with:
+          version: 9
+          run_install: false
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        working-directory: ./apps/api
+        run: pnpm install --frozen-lockfile
+
+      - name: Build API
+        working-directory: ./apps/api
+        run: pnpm build
+        env:
+          CF_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
+          CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+          CLERK_SECRET_KEY: ${{ secrets.CLERK_SECRET_KEY }}
+          GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
+          GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+          ENCRYPTION_KEY: ${{ secrets.ENCRYPTION_KEY }}
+
+      - name: Deploy API Preview (dry-run)
+        working-directory: ./apps/api
+        run: |
+          wrangler deploy --dry-run \
+            --env preview-${{ github.event.number }} \
+            --var CLERK_SECRET_KEY:${{ secrets.CLERK_SECRET_KEY }} \
+            --var GOOGLE_CLIENT_ID:${{ secrets.GOOGLE_CLIENT_ID }} \
+            --var GOOGLE_CLIENT_SECRET:${{ secrets.GOOGLE_CLIENT_SECRET }} \
+            --var ENCRYPTION_KEY:${{ secrets.ENCRYPTION_KEY }}
+        env:
+          CF_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
+          CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}

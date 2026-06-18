@@ -16,14 +16,15 @@ export const envSchema = z.object({
   CLERK_WEBHOOK_SECRET: z.string().min(1).optional(),
   CLERK_JWKS_URL: z.string().url().optional(),
 
-  // Supabase
-  NEXT_PUBLIC_SUPABASE_URL: z.string().url(),
-  NEXT_PUBLIC_SUPABASE_ANON_KEY: z.string().min(1),
-  SUPABASE_SERVICE_ROLE_KEY: z.string().min(1).optional(),
-  SUPABASE_JWT_SECRET: z.string().min(1).optional(),
-  DATABASE_URL: z.string().url().optional(),
+  // Cloudflare D1 (database)
+  CF_D1_DATABASE_ID: z.string().min(1).optional(), // For production
+  CF_D1_DATABASE_NAME: z.string().default('reviewflow-db'),
 
-  // Cloudflare
+  // Cloudflare R2 (storage)
+  CF_R2_BUCKET_NAME: z.string().default('reviewflow-assets'),
+  CF_R2_PUBLIC_URL: z.string().url().optional(),
+
+  // Cloudflare Workers/Pages
   CF_ACCOUNT_ID: z.string().min(1).optional(),
   CF_ZONE_ID: z.string().min(1).optional(),
   CF_API_TOKEN: z.string().min(1).optional(),
@@ -89,8 +90,6 @@ export const clientEnvSchema = envSchema.pick({
   NEXT_PUBLIC_APP_URL: true,
   NEXT_PUBLIC_API_URL: true,
   NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: true,
-  NEXT_PUBLIC_SUPABASE_URL: true,
-  NEXT_PUBLIC_SUPABASE_ANON_KEY: true,
 })
 
 export type ClientEnv = z.infer<typeof clientEnvSchema>
