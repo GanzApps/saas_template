@@ -2,10 +2,11 @@ export { cn, formatDate, formatRelativeTime, truncate, getInitials } from './uti
 
 export * from './Button'
 export * from './Input'
+export * from './Textarea'
 export * from './Card'
 export * from './Badge'
 export * from './Avatar'
 export * from './Dropdown'
+export * from './Tabs'
+export * from './ExternalLink'
 export * from './Separator'
-
-export { default as globals } from './globals.css'

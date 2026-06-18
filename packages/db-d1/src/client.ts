@@ -50,44 +50,44 @@ import type {
 // ============================================================================
 
 type RowMap = {
-  organizations Organization;
-  users User;
-  google_accounts GoogleAccount;
-  locations Location;
-  reviews Review;
-  campaigns Campaign;
-  campaign_recipients CampaignRecipient;
-  response_templates ResponseTemplate;
-  webhook_logs WebhookLog;
-  qr_codes QRCode;
-  usage_records UsageRecord;
+  organizations: Organization;
+  users: User;
+  google_accounts: GoogleAccount;
+  locations: Location;
+  reviews: Review;
+  campaigns: Campaign;
+  campaign_recipients: CampaignRecipient;
+  response_templates: ResponseTemplate;
+  webhook_logs: WebhookLog;
+  qr_codes: QRCode;
+  usage_records: UsageRecord;
 };
 
 type InsertMap = {
-  organizations OrganizationInsert;
-  users UserInsert;
-  google_accounts GoogleAccountInsert;
-  locations LocationInsert;
-  reviews ReviewInsert;
-  campaigns CampaignInsert;
-  campaign_recipients CampaignRecipientInsert;
-  response_templates ResponseTemplateInsert;
-  webhook_logs WebhookLogInsert;
-  qr_codes QRCodeInsert;
-  usage_records UsageRecordInsert;
+  organizations: OrganizationInsert;
+  users: UserInsert;
+  google_accounts: GoogleAccountInsert;
+  locations: LocationInsert;
+  reviews: ReviewInsert;
+  campaigns: CampaignInsert;
+  campaign_recipients: CampaignRecipientInsert;
+  response_templates: ResponseTemplateInsert;
+  webhook_logs: WebhookLogInsert;
+  qr_codes: QRCodeInsert;
+  usage_records: UsageRecordInsert;
 };
 
 type UpdateMap = {
-  organizations OrganizationUpdate;
-  users UserUpdate;
-  google_accounts GoogleAccountUpdate;
-  locations LocationUpdate;
-  reviews ReviewUpdate;
-  campaigns CampaignUpdate;
-  campaign_recipients CampaignRecipientUpdate;
-  response_templates ResponseTemplateUpdate;
-  qr_codes QRCodeUpdate;
-  usage_records UsageRecordUpdate;
+  organizations: OrganizationUpdate;
+  users: UserUpdate;
+  google_accounts: GoogleAccountUpdate;
+  locations: LocationUpdate;
+  reviews: ReviewUpdate;
+  campaigns: CampaignUpdate;
+  campaign_recipients: CampaignRecipientUpdate;
+  response_templates: ResponseTemplateUpdate;
+  qr_codes: QRCodeUpdate;
+  usage_records: UsageRecordUpdate;
 };
 
 // ============================================================================
@@ -305,9 +305,10 @@ export class D1Client {
   async update<TTable extends keyof RowMap>(
     table: TTable,
     id: UUID,
-    data: UpdateMap[TTable]
+    data: UpdateMap[keyof UpdateMap]
   ): Promise<RowMap[TTable] | null> {
-    const entries = Object.entries(data).filter(([, v]) => v !== undefined);
+    const updateData = data as Record<string, unknown>
+    const entries = Object.entries(updateData).filter(([, v]) => v !== undefined);
     if (entries.length === 0) {
       return this.findById(table, id);
     }
@@ -316,8 +317,7 @@ export class D1Client {
     const bindings = [...entries.map(([, v]) => v), id];
 
     const sql = `UPDATE ${table} SET ${setClause}, updated_at = ? WHERE id = ? RETURNING *`;
-    // Add updated_at before id
-    const withTimestamp = [...entries.map(([, v]) => v), this.constructor.now(), id];
+    const withTimestamp = [...entries.map(([, v]) => v), D1Client.now(), id];
     
     return this.queryFirst<RowMap[TTable]>(sql, withTimestamp);
   }
@@ -326,9 +326,9 @@ export class D1Client {
    * Delete by primary key
    */
   async delete(table: keyof RowMap, id: UUID): Promise<boolean> {
-    const sql = `DELETE FROM ${table} WHERE id = ?`;
-    const result = await this.run(sql, [id]);
-    return (result.changes ?? 0) > 0;
+    const sql = `DELETE FROM ${table} WHERE id = ?`
+    const result = await this.run(sql, [id])
+    return (result.meta?.changes ?? 0) > 0
   }
 
   /**

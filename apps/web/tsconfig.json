@@ -4,7 +4,7 @@
     "baseUrl": ".",
     "paths": {
       "@saas/config": ["../../packages/config/src"],
-      "@saas/db": ["../../packages/db/src"],
+      "@saas/db-d1": ["../../packages/db-d1/src"],
       "@saas/ui": ["../../packages/ui/src"]
     },
     "plugins": [{ "name": "next" }]

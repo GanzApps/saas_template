@@ -229,7 +229,11 @@ export default function ReviewDetailPage() {
                 <div className="flex items-center justify-between">
                   <label className="font-medium">Write your reply</label>
                   <Button variant="ghost" size="sm" onClick={() => setShowTemplates(!showTemplates)}>
-                    {showTemplates ? <Edit className="h-4 w-4 mr-1" />Hide : <MessageSquare className="h-4 w-4 mr-1" />}Templates
+                    {showTemplates ? (
+                      <>Hide <Edit className="h-4 w-4 ml-1" /></>
+                    ) : (
+                      <>Templates <MessageSquare className="h-4 w-4 ml-1" /></>
+                    )}
                   </Button>
                 </div>
 

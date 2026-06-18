@@ -102,10 +102,11 @@ export class R2Client {
     fieldName: string,
     folder: string
   ): Promise<UploadResult> {
-    const file = formData.get(fieldName) as File
-    if (!file) {
+    const entry = formData.get(fieldName)
+    if (!entry || typeof entry === 'string') {
       throw new Error(`No file found in field: ${fieldName}`)
     }
+    const file = entry as unknown as File
 
     const key = R2Client.generateKey(folder, file.name)
     const arrayBuffer = await file.arrayBuffer()

@@ -18,7 +18,7 @@ interface DropdownProps {
 
 export function Dropdown({ trigger, items, align = 'start' }: DropdownProps) {
   const [open, setOpen] = React.useState(false)
-  const triggerRef = React.useRef<HTMLButtonElement>(null)
+  const triggerRef = React.useRef<HTMLDivElement>(null)
   const contentRef = React.useRef<HTMLDivElement>(null)
 
   React.useEffect(() => {

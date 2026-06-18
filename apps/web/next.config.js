@@ -3,7 +3,7 @@ import createNextIntlPlugin from 'next-intl/plugin'
 
 /** @type {import('next').NextConfig} */
 const nextConfig: NextConfig = {
-  transpilePackages: ['@saas/ui', '@saas/config', '@saas/db'],
+  transpilePackages: ['@saas/ui', '@saas/config', '@saas/db-d1'],
   experimental: {
     optimizePackageImports: ['@saas/ui', 'lucide-react'],
   },

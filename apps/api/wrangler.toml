@@ -2,6 +2,7 @@ name = "reviewflow-api"
 main = "src/index.ts"
 compatibility_date = "2024-06-17"
 compatibility_flags = ["nodejs_compat"]
+account_id = "a76e974e7c97043eb60c5a97bb651284"
 
 [vars]
 NODE_ENV = "production"

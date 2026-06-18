@@ -12,15 +12,15 @@
   "dependencies": {
     "twilio": "^5.0.0",
     "resend": "^3.2.0",
-    "zod": "catalog:",
-    "@saas/config": "*",
-    "@saas/db": "*"
+    "zod": "^3.22.0",
+    "@saas/config": "workspace:*"
   },
   "devDependencies": {
-    "@saas/tsconfig": "*",
-    "eslint": "catalog:",
-    "typescript": "catalog:",
-    "vitest": "catalog:",
-    "@vitest/coverage-v8": "catalog:"
+    "@saas/tsconfig": "workspace:*",
+    "eslint": "^8.57.0",
+    "typescript": "^5.4.0",
+    "vitest": "^1.4.0",
+    "@vitest/coverage-v8": "^1.4.0",
+    "@types/node": "^20.11.0"
   }
 }

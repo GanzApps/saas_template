@@ -8,11 +8,11 @@
     "lint": "eslint src/"
   },
   "dependencies": {
-    "zod": "catalog:"
+    "zod": "^3.22.0"
   },
   "devDependencies": {
-    "@saas/tsconfig": "*",
-    "eslint": "catalog:",
-    "typescript": "catalog:"
+    "@saas/tsconfig": "workspace:*",
+    "eslint": "^8.57.0",
+    "typescript": "^5.4.0"
   }
 }

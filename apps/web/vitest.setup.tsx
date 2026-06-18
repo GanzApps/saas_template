@@ -10,9 +10,13 @@ vi.mock('@clerk/nextjs', () => ({
   SignOutButton: ({ children }) => <button data-testid="sign-out">{children}</button>,
 }))
 
-// Mock Supabase
-vi.mock('@saas/db', () => ({
-  createSupabaseClient: () => ({ from: () => ({ select: () => ({ single: () => Promise.resolve({ data: null, error: null }) }) }) }),
+// Mock D1 client
+vi.mock('@saas/db-d1', () => ({
+  createD1Client: () => ({
+    from: () => ({ select: () => ({ single: () => Promise.resolve({ data: null, error: null }) }) }),
+    getOrganization: () => Promise.resolve({ id: 'org_test', name: 'Test Org', slug: 'test-org', plan: 'pro' }),
+    listLocations: () => Promise.resolve([]),
+  }),
 }))
 
 // Mock next/navigation

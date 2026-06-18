@@ -13,24 +13,28 @@
     "test:ci": "vitest run --coverage"
   },
   "dependencies": {
-    "hono": "catalog:",
-    "@hono/clerk-auth": "catalog:",
-    "@hono/zod-validator": "catalog:",
-    "@saas/config": "*",
-    "@saas/db-d1": "*",
-    "@saas/google": "*",
-    "@saas/communications": "*",
-    "@saas/storage": "*",
-    "zod": "catalog:"
+    "hono": "^4.2.0",
+    "@hono/clerk-auth": "^1.0.0",
+    "@hono/zod-validator": "^0.2.0",
+    "@saas/config": "workspace:*",
+    "@saas/db-d1": "workspace:*",
+    "@saas/google": "workspace:*",
+    "@saas/communications": "workspace:*",
+    "@saas/storage": "workspace:*",
+    "zod": "^3.22.0",
+    "googleapis": "^133.0.0",
+    "twilio": "^5.0.0",
+    "resend": "^3.2.0",
+    "svix": "^1.24.0"
   },
   "devDependencies": {
-    "@saas/tsconfig": "*",
-    "@cloudflare/workers-types": "catalog:",
-    "@types/node": "catalog:",
-    "eslint": "catalog:",
-    "typescript": "catalog:",
-    "vitest": "catalog:",
-    "@vitest/coverage-v8": "catalog:",
-    "wrangler": "catalog:"
+    "@saas/tsconfig": "workspace:*",
+    "@cloudflare/workers-types": "^4.20240405.0",
+    "@types/node": "^20.11.0",
+    "eslint": "^8.57.0",
+    "typescript": "^5.4.0",
+    "vitest": "^1.4.0",
+    "@vitest/coverage-v8": "^1.4.0",
+    "wrangler": "^3.47.0"
   }
 }

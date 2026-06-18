@@ -6,6 +6,8 @@
     "declaration": true,
     "declarationMap": true,
     "composite": true,
+    "target": "ES2022",
+    "lib": ["ES2022", "ES2020", "ES2019", "ES2018", "ES2017", "ES2016", "ES2015", "DOM", "WebWorker"],
     "types": ["@cloudflare/workers-types"]
   },
   "include": ["src/**/*"],
