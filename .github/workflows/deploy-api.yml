@@ -2,7 +2,7 @@ name: Deploy API (Production)
 
 on:
   push:
-    branches: [main]
+    branches: [master, main]
   workflow_dispatch:
 
 env:
@@ -13,7 +13,7 @@ jobs:
   deploy-api:
     name: Deploy Cloudflare Workers Production
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    if: github.ref == 'refs/heads/master' && github.event_name == 'push'
     steps:
       - name: Checkout
         uses: actions/checkout@v4
