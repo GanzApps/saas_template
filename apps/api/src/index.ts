@@ -2,8 +2,8 @@ import { Hono } from 'hono'
 import { clerkMiddleware, getAuth } from '@hono/clerk-auth'
 import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
-import { createClient } from '@supabase/supabase-js'
 import { validateEnv, Env } from '@saas/config'
+import { D1Client, createD1Client } from '@saas/db-d1'
 import {
   createOAuthClient,
   getAuthUrl,
@@ -20,11 +20,18 @@ import {
   getValidAccessToken,
   createMyBusinessClient,
   createMyBusinessInfoClient,
+  decodePubSubMessage,
+  parseReviewNotification,
+  getLocationIdFromReviewName,
+  googleStarRatingToNumber,
 } from '@saas/google'
-import { encrypt, decrypt } from '@saas/google'
 import { sendEmail, sendSMS } from '@saas/communications'
+import { encrypt, decrypt } from '@saas/google'
 
-type Bindings = Env
+type Bindings = Env & {
+  DB: D1Database
+  REVIEWFLOW_BUCKET: R2Bucket
+}
 
 const app = new Hono<{ Bindings: Bindings }>()
 
@@ -33,25 +40,19 @@ app.use('*', clerkMiddleware({
   jwksUrl: (c) => c.env.CLERK_JWKS_URL || `https://${new URL(c.env.NEXT_PUBLIC_APP_URL).hostname}/.well-known/jwks.json`,
 }))
 
-// Supabase client factory
-function getSupabase(c: any) {
-  return createClient(c.env.SUPABASE_URL, c.env.SUPABASE_SERVICE_ROLE_KEY, {
-    auth: { autoRefreshToken: false, persistSession: false },
-  })
+// D1 Client factory
+function getDB(c: any): D1Client {
+  return createD1Client(c.env.DB)
 }
 
-// Get user's organization ID
+// Get user's organization ID from Clerk JWT + D1
 async function getUserOrgId(c: any): Promise<string> {
   const auth = getAuth(c)
   if (!auth?.userId) throw new Error('Unauthorized')
 
-  const supabase = getSupabase(c)
-  const { data: user } = await supabase
-    .from('users')
-    .select('organization_id')
-    .eq('clerk_id', auth.userId)
-    .single()
-
+  const db = getDB(c)
+  const user = await db.getUserByClerkId(auth.userId)
+  
   if (!user?.organization_id) throw new Error('No organization found')
   return user.organization_id
 }
@@ -65,9 +66,7 @@ app.get('/api/auth/google', async (c) => {
   const orgId = await getUserOrgId(c)
   const oauthClient = createOAuthClient(c.env)
 
-  // Generate state with org ID for security
   const state = Buffer.from(JSON.stringify({ orgId, nonce: crypto.randomUUID() })).toString('base64url')
-
   const authUrl = getAuthUrl(oauthClient, state)
   return c.redirect(authUrl)
 })
@@ -91,35 +90,28 @@ app.get('/api/auth/google/callback', async (c) => {
     const oauthClient = createOAuthClient(c.env)
     const tokens = await getTokensFromCode(oauthClient, code)
 
-    // Fetch account info
     const accountInfo = await fetchGoogleAccountInfo(c.env.GOOGLE_CLIENT_ID, tokens.access_token)
-
-    // Encrypt tokens for storage
     const encrypted = encryptTokens(tokens, c.env)
 
-    const supabase = getSupabase(c)
+    const db = getDB(c)
 
     // Upsert Google account
-    const { data: account, error } = await supabase
-      .from('google_accounts')
-      .upsert({
-        organization_id: orgId,
-        google_account_email: accountInfo.email,
-        access_token_encrypted: encrypted.access_token_encrypted,
-        refresh_token_encrypted: encrypted.refresh_token_encrypted,
-        token_expires_at: encrypted.token_expires_at,
-        account_name: accountInfo.name,
-        account_type: 'BUSINESS',
-        is_active: true,
-        updated_at: new Date().toISOString(),
-      }, { onConflict: 'organization_id,google_account_email' })
-      .select()
-      .single()
-
-    if (error) throw error
+    const account = await db.insert('google_accounts', {
+      id: D1Client.uuid(),
+      organization_id: orgId,
+      google_account_email: accountInfo.email,
+      access_token_encrypted: encrypted.access_token_encrypted,
+      refresh_token_encrypted: encrypted.refresh_token_encrypted,
+      token_expires_at: encrypted.token_expires_at,
+      account_name: accountInfo.name,
+      account_type: 'BUSINESS',
+      is_active: 1,
+      created_at: D1Client.now(),
+      updated_at: D1Client.now(),
+    })
 
     // Sync locations for this account
-    await syncLocationsForAccount(c.env, supabase, account.id, tokens.access_token)
+    await syncLocationsForAccount(c.env, db, account.id, tokens.access_token)
 
     return c.redirect(`${c.env.NEXT_PUBLIC_APP_URL}/dashboard?connected=true`)
   } catch (err) {
@@ -133,28 +125,21 @@ app.post('/api/auth/google/disconnect', async (c) => {
   const orgId = await getUserOrgId(c)
   const { accountId } = await c.req.json()
 
-  const supabase = getSupabase(c)
+  const db = getDB(c)
 
   // Verify ownership
-  const { data: account } = await supabase
-    .from('google_accounts')
-    .select('id')
-    .eq('id', accountId)
-    .eq('organization_id', orgId)
-    .single()
-
+  const account = await db.findFirst('google_accounts', 'id = ? AND organization_id = ?', [accountId, orgId])
   if (!account) return c.json({ error: 'Account not found' }, 404)
 
-  // Deactivate instead of delete (preserve review history)
-  await supabase
-    .from('google_accounts')
-    .update({ is_active: false, updated_at: new Date().toISOString() })
-    .eq('id', accountId)
+  // Deactivate instead of delete
+  await db.update('google_accounts', accountId, {
+    is_active: 0,
+    updated_at: D1Client.now(),
+  })
 
   return c.json({ success: true })
 })
 
-// Import fetchGoogleAccountInfo from google package
 async function fetchGoogleAccountInfo(clientId: string, accessToken: string) {
   const { google } = await import('googleapis')
   const oauth2 = google.oauth2({ version: 'v2', auth: accessToken })
@@ -169,60 +154,44 @@ async function fetchGoogleAccountInfo(clientId: string, accessToken: string) {
 // GET /api/accounts - List connected Google accounts
 app.get('/api/accounts', async (c) => {
   const orgId = await getUserOrgId(c)
-  const supabase = getSupabase(c)
+  const db = getDB(c)
 
-  const { data, error } = await supabase
-    .from('google_accounts')
-    .select('*')
-    .eq('organization_id', orgId)
-    .eq('is_active', true)
-    .order('created_at', { ascending: false })
+  const accounts = await db.findMany('google_accounts', {
+    where: 'organization_id = ? AND is_active = 1',
+    bindings: [orgId],
+    orderBy: 'created_at DESC',
+  })
 
-  if (error) return c.json({ error: error.message }, 500)
-  return c.json(data)
+  return c.json(accounts)
 })
 
 // GET /api/accounts/:id/locations - List locations for an account
 app.get('/api/accounts/:id/locations', async (c) => {
   const orgId = await getUserOrgId(c)
   const accountId = c.req.param('id')
-  const supabase = getSupabase(c)
+  const db = getDB(c)
 
   // Verify account ownership
-  const { data: account } = await supabase
-    .from('google_accounts')
-    .select('*')
-    .eq('id', accountId)
-    .eq('organization_id', orgId)
-    .single()
-
+  const account = await db.findFirst('google_accounts', 'id = ? AND organization_id = ?', [accountId, orgId])
   if (!account) return c.json({ error: 'Account not found' }, 404)
 
-  const { data, error } = await supabase
-    .from('locations')
-    .select('*')
-    .eq('google_account_id', accountId)
-    .eq('is_active', true)
-    .order('name')
+  const locations = await db.findMany('locations', {
+    where: 'google_account_id = ? AND is_active = 1',
+    bindings: [accountId],
+    orderBy: 'name ASC',
+  })
 
-  if (error) return c.json({ error: error.message }, 500)
-  return c.json(data)
+  return c.json(locations)
 })
 
 // POST /api/accounts/:id/sync - Manual sync locations & reviews
 app.post('/api/accounts/:id/sync', async (c) => {
   const orgId = await getUserOrgId(c)
   const accountId = c.req.param('id')
-  const supabase = getSupabase(c)
+  const db = getDB(c)
 
   // Verify account ownership
-  const { data: account } = await supabase
-    .from('google_accounts')
-    .select('*')
-    .eq('id', accountId)
-    .eq('organization_id', orgId)
-    .single()
-
+  const account = await db.findFirst('google_accounts', 'id = ? AND organization_id = ?', [accountId, orgId])
   if (!account) return c.json({ error: 'Account not found' }, 404)
 
   // Get valid access token
@@ -239,8 +208,6 @@ app.post('/api/accounts/:id/sync', async (c) => {
       account.refresh_token_encrypted,
       c.env
     )
-    // Update stored tokens (in background, don't block)
-    // TODO: Update tokens in DB
   }
 
   const myBusinessInfo = createMyBusinessInfoClient(createOAuthClient(c.env))
@@ -251,9 +218,21 @@ app.post('/api/accounts/:id/sync', async (c) => {
   let syncedLocations = 0
 
   for (const loc of locations) {
-    const { error } = await supabase
-      .from('locations')
-      .upsert({
+    const existing = await db.findFirst('locations', 'google_location_id = ?', [loc.name!])
+    if (existing) {
+      await db.update('locations', existing.id, {
+        name: loc.title!,
+        address: loc.location?.address?.addressLines?.[0] || '',
+        phone: loc.phoneNumbers?.primaryPhone || null,
+        website: loc.websiteUri || null,
+        primary_category: loc.primaryCategory?.displayName || null,
+        place_id: loc.metadata?.placeId || null,
+        is_active: 1,
+        updated_at: D1Client.now(),
+      })
+    } else {
+      await db.insert('locations', {
+        id: D1Client.uuid(),
         google_account_id: accountId,
         organization_id: orgId,
         google_location_id: loc.name!,
@@ -263,73 +242,73 @@ app.post('/api/accounts/:id/sync', async (c) => {
         website: loc.websiteUri || null,
         primary_category: loc.primaryCategory?.displayName || null,
         place_id: loc.metadata?.placeId || null,
-        is_active: true,
-        updated_at: new Date().toISOString(),
-      }, { onConflict: 'google_location_id' })
-    if (!error) syncedLocations++
+        is_active: 1,
+        created_at: D1Client.now(),
+        updated_at: D1Client.now(),
+      })
+    }
+    syncedLocations++
   }
 
   // Sync reviews for each location
   let syncedReviews = 0
-  const { data: allLocations } = await supabase
-    .from('locations')
-    .select('id, google_location_id')
-    .eq('google_account_id', accountId)
+  const allLocations = await db.findMany('locations', {
+    where: 'google_account_id = ?',
+    bindings: [accountId],
+  })
 
-  for (const loc of allLocations || []) {
+  for (const loc of allLocations) {
     const reviewsResult = await listReviews(myBusinessInfo, loc.google_location_id, 200)
     for (const review of reviewsResult.reviews) {
-      const { error } = await supabase
-        .from('reviews')
-        .upsert({
+      const existingReview = await db.findFirst('reviews', 'google_review_id = ?', [review.name!])
+      if (existingReview) {
+        await db.update('reviews', existingReview.id, {
+          star_rating: googleStarRatingToNumber(review.starRating!),
+          comment: review.comment,
+          reply_text: review.reviewReply?.comment || null,
+          reply_time: review.reviewReply?.updateTime || null,
+          has_reply: !!review.reviewReply?.comment ? 1 : 0,
+          is_replied_by_us: !!review.reviewReply?.comment ? 1 : 0,
+          raw_json: D1Client.json(review),
+          updated_at: D1Client.now(),
+        })
+      } else {
+        await db.insert('reviews', {
+          id: D1Client.uuid(),
           location_id: loc.id,
           organization_id: orgId,
           google_review_id: review.name!,
-          google_reviewer_id: review.reviewer?.name,
-          reviewer_name: review.reviewer?.displayName,
-          reviewer_profile_photo: review.reviewer?.profilePhotoUrl,
+          google_reviewer_id: review.reviewer?.name || null,
+          reviewer_name: review.reviewer?.displayName || null,
+          reviewer_profile_photo: review.reviewer?.profilePhotoUrl || null,
           star_rating: googleStarRatingToNumber(review.starRating!),
-          comment: review.comment,
+          comment: review.comment || null,
           review_time: review.createTime!,
           reply_text: review.reviewReply?.comment || null,
           reply_time: review.reviewReply?.updateTime || null,
-          has_reply: !!review.reviewReply?.comment,
-          raw_json: review,
-          updated_at: new Date().toISOString(),
-        }, { onConflict: 'google_review_id' })
-      if (!error) syncedReviews++
+          has_reply: !!review.reviewReply?.comment ? 1 : 0,
+          is_replied_by_us: !!review.reviewReply?.comment ? 1 : 0,
+          raw_json: D1Client.json(review),
+          created_at: D1Client.now(),
+          updated_at: D1Client.now(),
+        })
+      }
+      syncedReviews++
     }
-    // Update location sync time
-    await supabase
-      .from('locations')
-      .update({ last_review_sync_at: new Date().toISOString() })
-      .eq('id', loc.id)
+    await db.update('locations', loc.id, {
+      last_review_sync_at: D1Client.now(),
+      updated_at: D1Client.now(),
+    })
   }
 
-  // Update account last sync
-  await supabase
-    .from('google_accounts')
-    .update({ last_sync_at: new Date().toISOString(), sync_error: null })
-    .eq('id', accountId)
+  await db.update('google_accounts', accountId, {
+    last_sync_at: D1Client.now(),
+    sync_error: null,
+    updated_at: D1Client.now(),
+  })
 
   return c.json({ synced: { locations: syncedLocations, reviews: syncedReviews } })
 })
-
-function googleStarRatingToNumber(rating: string): number {
-  const map: Record<string, number> = { ONE: 1, TWO: 2, THREE: 3, FOUR: 4, FIVE: 5 }
-  return map[rating] || 0
-}
-
-function decryptTokens(
-  stored: { access_token_encrypted: string; refresh_token_encrypted: string; token_expires_at: string },
-  env: Pick<Env, 'ENCRYPTION_KEY'>
-) {
-  return {
-    access_token: decrypt(stored.access_token_encrypted, env.ENCRYPTION_KEY),
-    refresh_token: decrypt(stored.refresh_token_encrypted, env.ENCRYPTION_KEY),
-    expiry_date: new Date(stored.token_expires_at).getTime(),
-  }
-}
 
 // ============================================
 // REVIEWS
@@ -338,33 +317,33 @@ function decryptTokens(
 // GET /api/reviews - List reviews with filters
 app.get('/api/reviews', async (c) => {
   const orgId = await getUserOrgId(c)
-  const supabase = getSupabase(c)
+  const db = getDB(c)
 
   const locationId = c.req.query('locationId')
   const status = c.req.query('status')
   const rating = c.req.query('rating')
   const page = parseInt(c.req.query('page') || '1')
   const limit = Math.min(parseInt(c.req.query('limit') || '50'), 100)
-  const from = (page - 1) * limit
+  const offset = (page - 1) * limit
 
-  let query = supabase
-    .from('reviews')
-    .select('*, locations(name)', { count: 'exact' })
-    .eq('organization_id', orgId)
-    .order('review_time', { ascending: false })
-    .range(from, from + limit - 1)
+  const reviews = await db.getReviewsByOrganization(orgId, {
+    location_id: locationId || undefined,
+    status: status as any,
+    star_rating: rating ? parseInt(rating) : undefined,
+    limit,
+    offset,
+  })
 
-  if (locationId) query = query.eq('location_id', locationId)
-  if (status) query = query.eq('status', status)
-  if (rating) query = query.eq('star_rating', parseInt(rating))
-
-  const { data, error, count } = await query
-
-  if (error) return c.json({ error: error.message }, 500)
+  // Get total count for pagination
+  const totalResult = await db.queryFirst<{ count: number }>(
+    `SELECT COUNT(*) as count FROM reviews WHERE organization_id = ?`,
+    [orgId]
+  )
+  const total = totalResult?.count || 0
 
   return c.json({
-    data,
-    pagination: { page, limit, total: count || 0, totalPages: Math.ceil((count || 0) / limit) },
+    data: reviews,
+    pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
   })
 })
 
@@ -372,17 +351,12 @@ app.get('/api/reviews', async (c) => {
 app.get('/api/reviews/:id', async (c) => {
   const orgId = await getUserOrgId(c)
   const reviewId = c.req.param('id')
-  const supabase = getSupabase(c)
+  const db = getDB(c)
 
-  const { data, error } = await supabase
-    .from('reviews')
-    .select('*, locations(name)')
-    .eq('id', reviewId)
-    .eq('organization_id', orgId)
-    .single()
+  const review = await db.findFirst('reviews', 'id = ? AND organization_id = ?', [reviewId, orgId])
+  if (!review) return c.json({ error: 'Review not found' }, 404)
 
-  if (error || !data) return c.json({ error: 'Review not found' }, 404)
-  return c.json(data)
+  return c.json(review)
 })
 
 // POST /api/reviews/:id/reply - Reply to a review
@@ -392,33 +366,34 @@ app.post('/api/reviews/:id/reply', zValidator('json', replySchema), async (c) =>
   const orgId = await getUserOrgId(c)
   const reviewId = c.req.param('id')
   const { text } = c.req.valid('json')
-  const supabase = getSupabase(c)
+  const db = getDB(c)
 
   // Get review with location and account info
-  const { data: review } = await supabase
-    .from('reviews')
-    .select('*, locations(google_location_id, google_accounts(google_account_email))')
-    .eq('id', reviewId)
-    .eq('organization_id', orgId)
-    .single()
+  const review = await db.queryFirst<any>(
+    `SELECT r.*, l.google_location_id, ga.google_account_email, ga.access_token_encrypted, ga.refresh_token_encrypted, ga.token_expires_at
+     FROM reviews r
+     JOIN locations l ON r.location_id = l.id
+     JOIN google_accounts ga ON l.google_account_id = ga.id
+     WHERE r.id = ? AND r.organization_id = ?`,
+    [reviewId, orgId]
+  )
 
   if (!review) return c.json({ error: 'Review not found' }, 404)
 
-  const googleAccount = review.locations.google_accounts
-  const locationName = `${googleAccount.google_account_email}/locations/${review.locations.google_location_id}/reviews/${review.google_review_id}`
+  const locationName = `${review.google_account_email}/locations/${review.google_location_id}/reviews/${review.google_review_id}`
 
   // Get valid access token
   const tokens = decryptTokens({
-    access_token_encrypted: googleAccount.access_token_encrypted,
-    refresh_token_encrypted: googleAccount.refresh_token_encrypted,
-    token_expires_at: googleAccount.token_expires_at,
+    access_token_encrypted: review.access_token_encrypted,
+    refresh_token_encrypted: review.refresh_token_encrypted,
+    token_expires_at: review.token_expires_at,
   }, c.env)
 
   let accessToken = tokens.access_token
   if (isTokenExpired(tokens.expiry_date)) {
     accessToken = await getValidAccessToken(
       createOAuthClient(c.env),
-      googleAccount.refresh_token_encrypted,
+      review.refresh_token_encrypted,
       c.env
     )
   }
@@ -430,24 +405,16 @@ app.post('/api/reviews/:id/reply', zValidator('json', replySchema), async (c) =>
   await replyToReview(myBusinessInfo, locationName, text)
 
   // Update local record
-  const { data, error } = await supabase
-    .from('reviews')
-    .update({
-      reply_text: text,
-      reply_time: new Date().toISOString(),
-      has_reply: true,
-      is_replied_by_us: true,
-      status: 'replied',
-      updated_at: new Date().toISOString(),
-    })
-    .eq('id', reviewId)
-    .select()
-    .single()
+  const data = await db.update('reviews', reviewId, {
+    reply_text: text,
+    reply_time: D1Client.now(),
+    has_reply: 1,
+    is_replied_by_us: 1,
+    status: 'replied',
+    updated_at: D1Client.now(),
+  })
 
-  if (error) return c.json({ error: error.message }, 500)
-
-  // Increment template usage if this was a template
-  // TODO: Track template usage
+  if (!data) return c.json({ error: 'Failed to update review' }, 500)
 
   return c.json(data)
 })
@@ -463,22 +430,20 @@ app.patch('/api/reviews/:id', zValidator('json', updateReviewSchema), async (c) 
   const orgId = await getUserOrgId(c)
   const reviewId = c.req.param('id')
   const { status, assignedTo, internalNotes } = c.req.valid('json')
-  const supabase = getSupabase(c)
+  const db = getDB(c)
 
-  const updates: any = { updated_at: new Date().toISOString() }
+  // Verify ownership
+  const review = await db.findFirst('reviews', 'id = ? AND organization_id = ?', [reviewId, orgId])
+  if (!review) return c.json({ error: 'Review not found' }, 404)
+
+  const updates: any = { updated_at: D1Client.now() }
   if (status) updates.status = status
   if (assignedTo !== undefined) updates.assigned_to = assignedTo
   if (internalNotes !== undefined) updates.internal_notes = internalNotes
 
-  const { data, error } = await supabase
-    .from('reviews')
-    .update(updates)
-    .eq('id', reviewId)
-    .eq('organization_id', orgId)
-    .select()
-    .single()
+  const data = await db.update('reviews', reviewId, updates)
+  if (!data) return c.json({ error: 'Failed to update review' }, 500)
 
-  if (error) return c.json({ error: error.message }, 500)
   return c.json(data)
 })
 
@@ -494,24 +459,21 @@ const bulkActionSchema = z.object({
 
 app.post('/api/reviews/bulk', zValidator('json', bulkActionSchema), async (c) => {
   const orgId = await getUserOrgId(c)
-  const { action, ids, data } = c.req.valid('json')
-  const supabase = getSupabase(c)
+  const { action, ids, data: actionData } = c.req.valid('json')
+  const db = getDB(c)
 
-  const updates: any = { updated_at: new Date().toISOString() }
-  if (action === 'assign' && data?.assignedTo !== undefined) updates.assigned_to = data.assignedTo
-  if (action === 'status' && data?.status) updates.status = data.status
+  const updates: any = { updated_at: D1Client.now() }
+  if (action === 'assign' && actionData?.assignedTo !== undefined) updates.assigned_to = actionData.assignedTo
+  if (action === 'status' && actionData?.status) updates.status = actionData.status
   if (action === 'archive') updates.status = 'archived'
 
-  const { data: updated, error } = await supabase
-    .from('reviews')
-    .update(updates)
-    .in('id', ids)
-    .eq('organization_id', orgId)
-    .select('id')
+  const placeholders = ids.map(() => '?').join(',')
+  const sql = `UPDATE reviews SET ${Object.entries(updates).map(([k]) => `${k} = ?`).join(', ')} WHERE id IN (${placeholders}) AND organization_id = ?`
+  const bindings = [...Object.values(updates), ...ids, orgId]
 
-  if (error) return c.json({ error: error.message }, 500)
+  const result = await db.run(sql, bindings)
 
-  return c.json({ updated: updated?.length || 0 })
+  return c.json({ updated: result.changes || 0 })
 })
 
 // ============================================
@@ -521,67 +483,63 @@ app.post('/api/reviews/bulk', zValidator('json', bulkActionSchema), async (c) =>
 // GET /api/campaigns - List campaigns
 app.get('/api/campaigns', async (c) => {
   const orgId = await getUserOrgId(c)
-  const supabase = getSupabase(c)
+  const db = getDB(c)
 
-  const { data, error } = await supabase
-    .from('campaigns')
-    .select('*, locations(name)')
-    .eq('organization_id', orgId)
-    .order('created_at', { ascending: false })
+  const campaigns = await db.getCampaignsByOrganization(orgId)
 
-  if (error) return c.json({ error: error.message }, 500)
-  return c.json(data)
+  return c.json(campaigns)
 })
 
 // POST /api/campaigns - Create campaign
 const createCampaignSchema = z.object({
   name: z.string().min(1).max(100),
   locationId: z.string().uuid().optional(),
-  type: z.enum(['sms', 'email', 'both']),
+  type: z.enum(['sms', 'email', 'qr', 'link']),
   templateSms: z.string().optional(),
   templateEmailSubject: z.string().optional(),
   templateEmailBody: z.string().optional(),
-  triggerType: z.enum(['manual', 'webhook', 'api']).default('manual'),
+  triggerType: z.enum(['manual', 'automatic', 'scheduled']).default('manual'),
 })
 
 app.post('/api/campaigns', zValidator('json', createCampaignSchema), async (c) => {
   const orgId = await getUserOrgId(c)
   const body = c.req.valid('json')
-  const supabase = getSupabase(c)
+  const db = getDB(c)
 
-  const { data, error } = await supabase
-    .from('campaigns')
-    .insert({ ...body, organization_id: orgId })
-    .select()
-    .single()
+  const campaign = await db.insert('campaigns', {
+    id: D1Client.uuid(),
+    organization_id: orgId,
+    location_id: body.locationId || null,
+    name: body.name,
+    type: body.type,
+    template_sms: body.templateSms || null,
+    template_email_subject: body.templateEmailSubject || null,
+    template_email_body: body.templateEmailBody || null,
+    trigger_type: body.triggerType,
+    is_active: 1,
+    settings: '{}',
+    created_at: D1Client.now(),
+    updated_at: D1Client.now(),
+  })
 
-  if (error) return c.json({ error: error.message }, 500)
-  return c.json(data, 201)
+  return c.json(campaign, 201)
 })
 
 // GET /api/campaigns/:id - Get campaign with recipients
 app.get('/api/campaigns/:id', async (c) => {
   const orgId = await getUserOrgId(c)
   const campaignId = c.req.param('id')
-  const supabase = getSupabase(c)
+  const db = getDB(c)
 
-  const { data: campaign } = await supabase
-    .from('campaigns')
-    .select('*')
-    .eq('id', campaignId)
-    .eq('organization_id', orgId)
-    .single()
-
+  const campaign = await db.findFirst('campaigns', 'id = ? AND organization_id = ?', [campaignId, orgId])
   if (!campaign) return c.json({ error: 'Campaign not found' }, 404)
 
-  const { data: recipients, error } = await supabase
-    .from('campaign_recipients')
-    .select('*')
-    .eq('campaign_id', campaignId)
-    .order('created_at', { ascending: false })
-    .limit(500)
-
-  if (error) return c.json({ error: error.message }, 500)
+  const recipients = await db.findMany('campaign_recipients', {
+    where: 'campaign_id = ?',
+    bindings: [campaignId],
+    orderBy: 'created_at DESC',
+    limit: 500,
+  })
 
   return c.json({ ...campaign, recipients: recipients || [] })
 })
@@ -599,36 +557,26 @@ app.post('/api/campaigns/:id/send', zValidator('json', sendCampaignSchema), asyn
   const orgId = await getUserOrgId(c)
   const campaignId = c.req.param('id')
   const { recipients: recipientList } = c.req.valid('json')
-  const supabase = getSupabase(c)
+  const db = getDB(c)
 
-  const { data: campaign } = await supabase
-    .from('campaigns')
-    .select('*')
-    .eq('id', campaignId)
-    .eq('organization_id', orgId)
-    .single()
-
+  const campaign = await db.findFirst('campaigns', 'id = ? AND organization_id = ?', [campaignId, orgId])
   if (!campaign) return c.json({ error: 'Campaign not found' }, 404)
   if (!campaign.is_active) return c.json({ error: 'Campaign is not active' }, 400)
 
   let queued = 0
 
   for (const recipient of recipientList) {
-    // Insert recipient record
-    const { data: newRecipient } = await supabase
-      .from('campaign_recipients')
-      .insert({
-        campaign_id: campaignId,
-        organization_id: orgId,
-        customer_name: recipient.customerName,
-        customer_phone: recipient.customerPhone,
-        customer_email: recipient.customerEmail,
-        status: 'pending',
-      })
-      .select()
-      .single()
-
-    if (!newRecipient) continue
+    const newRecipient = await db.insert('campaign_recipients', {
+      id: D1Client.uuid(),
+      campaign_id: campaignId,
+      organization_id: orgId,
+      customer_name: recipient.customerName || null,
+      customer_phone: recipient.customerPhone || null,
+      customer_email: recipient.customerEmail || null,
+      status: 'pending',
+      created_at: D1Client.now(),
+      updated_at: D1Client.now(),
+    })
 
     // Send SMS
     if ((campaign.type === 'sms' || campaign.type === 'both') && recipient.customerPhone) {
@@ -638,16 +586,18 @@ app.post('/api/campaigns/:id/send', zValidator('json', sendCampaignSchema), asyn
           body: campaign.template_sms || '',
           statusCallback: `${c.env.NEXT_PUBLIC_API_URL}/api/webhook/twilio`,
         })
-        await supabase
-          .from('campaign_recipients')
-          .update({ status: 'sent', sent_at: new Date().toISOString() })
-          .eq('id', newRecipient.id)
+        await db.update('campaign_recipients', newRecipient.id, {
+          status: 'sent',
+          sent_at: D1Client.now(),
+          updated_at: D1Client.now(),
+        })
         queued++
       } catch (err) {
-        await supabase
-          .from('campaign_recipients')
-          .update({ status: 'failed', error_message: (err as Error).message })
-          .eq('id', newRecipient.id)
+        await db.update('campaign_recipients', newRecipient.id, {
+          status: 'failed',
+          error_message: (err as Error).message,
+          updated_at: D1Client.now(),
+        })
       }
     }
 
@@ -659,16 +609,18 @@ app.post('/api/campaigns/:id/send', zValidator('json', sendCampaignSchema), asyn
           subject: campaign.template_email_subject || 'We\'d love your feedback!',
           html: campaign.template_email_body || '',
         })
-        await supabase
-          .from('campaign_recipients')
-          .update({ status: 'sent', sent_at: new Date().toISOString() })
-          .eq('id', newRecipient.id)
+        await db.update('campaign_recipients', newRecipient.id, {
+          status: 'sent',
+          sent_at: D1Client.now(),
+          updated_at: D1Client.now(),
+        })
         queued++
       } catch (err) {
-        await supabase
-          .from('campaign_recipients')
-          .update({ status: 'failed', error_message: (err as Error).message })
-          .eq('id', newRecipient.id)
+        await db.update('campaign_recipients', newRecipient.id, {
+          status: 'failed',
+          error_message: (err as Error).message,
+          updated_at: D1Client.now(),
+        })
       }
     }
   }
@@ -682,16 +634,10 @@ app.post('/api/campaigns/:id/send', zValidator('json', sendCampaignSchema), asyn
 
 app.get('/api/templates', async (c) => {
   const orgId = await getUserOrgId(c)
-  const supabase = getSupabase(c)
+  const db = getDB(c)
 
-  const { data, error } = await supabase
-    .from('response_templates')
-    .select('*')
-    .eq('organization_id', orgId)
-    .order('category', { ascending: true })
-
-  if (error) return c.json({ error: error.message }, 500)
-  return c.json(data)
+  const templates = await db.getTemplatesByOrganization(orgId)
+  return c.json(templates)
 })
 
 const createTemplateSchema = z.object({
@@ -703,25 +649,29 @@ const createTemplateSchema = z.object({
 app.post('/api/templates', zValidator('json', createTemplateSchema), async (c) => {
   const orgId = await getUserOrgId(c)
   const body = c.req.valid('json')
-  const supabase = getSupabase(c)
+  const db = getDB(c)
 
   // If this is default, unset other defaults in same category
   if (body.category) {
-    await supabase
-      .from('response_templates')
-      .update({ is_default: false })
-      .eq('organization_id', orgId)
-      .eq('category', body.category)
+    await db.run(
+      `UPDATE response_templates SET is_default = 0, updated_at = ? WHERE organization_id = ? AND category = ?`,
+      [D1Client.now(), orgId, body.category]
+    )
   }
 
-  const { data, error } = await supabase
-    .from('response_templates')
-    .insert({ ...body, organization_id: orgId })
-    .select()
-    .single()
+  const template = await db.insert('response_templates', {
+    id: D1Client.uuid(),
+    organization_id: orgId,
+    name: body.name,
+    content: body.content,
+    category: body.category || null,
+    is_default: body.category ? 1 : 0,
+    usage_count: 0,
+    created_at: D1Client.now(),
+    updated_at: D1Client.now(),
+  })
 
-  if (error) return c.json({ error: error.message }, 500)
-  return c.json(data, 201)
+  return c.json(template, 201)
 })
 
 // ============================================
@@ -733,24 +683,20 @@ app.get('/api/analytics/overview', async (c) => {
   const locationId = c.req.query('locationId')
   const days = parseInt(c.req.query('days') || '30')
   const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString()
-  const supabase = getSupabase(c)
+  const db = getDB(c)
 
-  let query = supabase
-    .from('reviews')
-    .select('star_rating, has_reply, review_time')
-    .eq('organization_id', orgId)
-    .gte('review_time', since)
+  const reviews = await db.getReviewsByOrganization(orgId, {
+    location_id: locationId || undefined,
+    date_from: since,
+    limit: 10000,
+  })
 
-  if (locationId) query = query.eq('location_id', locationId)
-
-  const { data: reviews } = await query
-
-  const totalReviews = reviews?.length || 0
-  const averageRating = reviews?.reduce((sum, r) => sum + r.star_rating, 0) / totalReviews || 0
-  const replyRate = reviews?.filter(r => r.has_reply).length / totalReviews || 0
+  const totalReviews = reviews.length
+  const averageRating = reviews.reduce((sum, r) => sum + r.star_rating, 0) / totalReviews || 0
+  const replyRate = reviews.filter(r => r.has_reply).length / totalReviews || 0
   const ratingDistribution = [1, 2, 3, 4, 5].map(star => ({
     star,
-    count: reviews?.filter(r => r.star_rating === star).length || 0,
+    count: reviews.filter(r => r.star_rating === star).length,
   }))
 
   return c.json({
@@ -769,23 +715,23 @@ app.get('/api/analytics/overview', async (c) => {
 // Google Pub/Sub webhook
 app.post('/api/webhook/google', async (c) => {
   const body = await c.req.json()
+  const db = getDB(c)
 
   // Log webhook
-  const supabase = getSupabase(c)
-  await supabase
-    .from('webhook_logs')
-    .insert({ source: 'google', event_type: 'notification', payload: body, status: 'received' })
-
-  // Verify OIDC token from Google (simplified - implement full verification in production)
-  // TODO: Verify Google Pub/Sub OIDC token
+  await db.insert('webhook_logs', {
+    id: D1Client.uuid(),
+    organization_id: null,
+    source: 'google',
+    event_type: 'notification',
+    payload: D1Client.json(body),
+    status: 'received',
+    created_at: D1Client.now(),
+  })
 
   const message = body.message
   if (!message) return c.json({ received: true })
 
   try {
-    const { decodePubSubMessage, parseReviewNotification, getLocationIdFromReviewName, googleStarRatingToNumber } =
-      await import('@saas/google')
-
     const notification = parseReviewNotification(message)
     if (!notification) return c.json({ received: true })
 
@@ -793,59 +739,68 @@ app.post('/api/webhook/google', async (c) => {
     if (!locationGoogleId) return c.json({ received: true })
 
     // Find location in our DB
-    const { data: location } = await supabase
-      .from('locations')
-      .select('id, organization_id, google_account_id')
-      .eq('google_location_id', locationGoogleId)
-      .single()
-
+    const location = await db.findFirst('locations', 'google_location_id = ?', [locationGoogleId])
     if (!location) return c.json({ received: true })
 
     const starRating = googleStarRatingToNumber(notification.review.starRating)
 
     if (notification.notificationType === 'REVIEW_DELETED') {
-      await supabase
-        .from('reviews')
-        .update({ status: 'archived' })
-        .eq('google_review_id', notification.review.name)
+      await db.run(
+        `UPDATE reviews SET status = 'archived', updated_at = ? WHERE google_review_id = ?`,
+        [D1Client.now(), notification.review.name]
+      )
       return c.json({ received: true })
     }
 
     // Upsert review
-    await supabase
-      .from('reviews')
-      .upsert({
+    const existing = await db.findFirst('reviews', 'google_review_id = ?', [notification.review.name])
+    if (existing) {
+      await db.update('reviews', existing.id, {
+        google_reviewer_id: notification.review.reviewer?.name || null,
+        reviewer_name: notification.review.reviewer?.displayName || null,
+        reviewer_profile_photo: notification.review.reviewer?.profilePhotoUrl || null,
+        star_rating: starRating,
+        comment: notification.review.comment || null,
+        reply_text: notification.review.reviewReply?.comment || null,
+        reply_time: notification.review.reviewReply?.updateTime || null,
+        has_reply: !!notification.review.reviewReply?.comment ? 1 : 0,
+        is_replied_by_us: !!notification.review.reviewReply?.comment ? 1 : 0,
+        raw_json: D1Client.json(notification.review),
+        updated_at: D1Client.now(),
+      })
+    } else {
+      await db.insert('reviews', {
+        id: D1Client.uuid(),
         location_id: location.id,
         organization_id: location.organization_id,
         google_review_id: notification.review.name,
-        google_reviewer_id: notification.review.reviewer?.name,
-        reviewer_name: notification.review.reviewer?.displayName,
-        reviewer_profile_photo: notification.review.reviewer?.profilePhotoUrl,
+        google_reviewer_id: notification.review.reviewer?.name || null,
+        reviewer_name: notification.review.reviewer?.displayName || null,
+        reviewer_profile_photo: notification.review.reviewer?.profilePhotoUrl || null,
         star_rating: starRating,
-        comment: notification.review.comment,
+        comment: notification.review.comment || null,
         review_time: notification.review.createTime,
         reply_text: notification.review.reviewReply?.comment || null,
         reply_time: notification.review.reviewReply?.updateTime || null,
-        has_reply: !!notification.review.reviewReply?.comment,
-        is_replied_by_us: !!notification.review.reviewReply?.comment,
-        raw_json: notification.review,
-        updated_at: new Date().toISOString(),
-      }, { onConflict: 'google_review_id' })
+        has_reply: !!notification.review.reviewReply?.comment ? 1 : 0,
+        is_replied_by_us: !!notification.review.reviewReply?.comment ? 1 : 0,
+        raw_json: D1Client.json(notification.review),
+        created_at: D1Client.now(),
+        updated_at: D1Client.now(),
+      })
+    }
 
-    // Update webhook log
-    await supabase
-      .from('webhook_logs')
-      .update({ status: 'processed' })
-      .eq('source', 'google')
-      .eq('payload->message->messageId', message.messageId)
+    await db.run(
+      `UPDATE webhook_logs SET status = 'processed' WHERE source = 'google' AND json_extract(payload, '$.message.messageId') = ?`,
+      [message.messageId]
+    )
 
   } catch (err) {
     console.error('Google webhook error:', err)
-    await supabase
-      .from('webhook_logs')
-      .update({ status: 'failed', error_message: (err as Error).message })
-      .eq('source', 'google')
-      .eq('payload->message->messageId', message.messageId)
+    await db.run(
+      `UPDATE webhook_logs SET status = 'failed', error_message = ? WHERE source = 'google' AND json_extract(payload, '$.message.messageId') = ?`,
+      [(err as Error).message, message.messageId]
+    )
   }
 
   return c.json({ received: true })
@@ -860,28 +815,40 @@ app.post('/api/webhook/twilio', async (c) => {
     return c.json({ error: 'Invalid signature' }, 401)
   }
 
-  const supabase = getSupabase(c)
-  await supabase
-    .from('webhook_logs')
-    .insert({ source: 'twilio', event_type: params.MessageStatus, payload: params, status: 'received' })
+  const db = getDB(c)
+  await db.insert('webhook_logs', {
+    id: D1Client.uuid(),
+    organization_id: null,
+    source: 'twilio',
+    event_type: params.MessageStatus as string,
+    payload: D1Client.json(params),
+    status: 'received',
+    created_at: D1Client.now(),
+  })
 
   const { MessageSid, MessageStatus, ErrorCode, ErrorMessage } = params as any
 
-  await supabase
-    .from('campaign_recipients')
-    .update({
-      status: MessageStatus === 'delivered' ? 'delivered' :
-              MessageStatus === 'failed' || MessageStatus === 'undelivered' ? 'failed' : 'sent',
-      delivered_at: MessageStatus === 'delivered' ? new Date().toISOString() : null,
-      error_message: ErrorMessage || null,
-    })
-    .eq('external_id', MessageSid)
+  await db.run(
+    `UPDATE campaign_recipients SET 
+      status = ?, 
+      delivered_at = ?, 
+      error_message = ?, 
+      updated_at = ? 
+     WHERE external_id = ?`,
+    [
+      MessageStatus === 'delivered' ? 'delivered' :
+      MessageStatus === 'failed' || MessageStatus === 'undelivered' ? 'failed' : 'sent',
+      MessageStatus === 'delivered' ? D1Client.now() : null,
+      ErrorMessage || null,
+      D1Client.now(),
+      MessageSid,
+    ]
+  )
 
-  await supabase
-    .from('webhook_logs')
-    .update({ status: 'processed' })
-    .eq('source', 'twilio')
-    .eq('payload->MessageSid', MessageSid)
+  await db.run(
+    `UPDATE webhook_logs SET status = 'processed' WHERE source = 'twilio' AND json_extract(payload, '$.MessageSid') = ?`,
+    [MessageSid]
+  )
 
   return c.json({ received: true })
 })
@@ -895,12 +862,17 @@ app.post('/api/webhook/resend', async (c) => {
     return c.json({ error: 'Invalid signature' }, 401)
   }
 
-  const supabase = getSupabase(c)
-  await supabase
-    .from('webhook_logs')
-    .insert({ source: 'resend', event_type: body.type, payload: body, status: 'received' })
+  const db = getDB(c)
+  await db.insert('webhook_logs', {
+    id: D1Client.uuid(),
+    organization_id: null,
+    source: 'resend',
+    event_type: body.type,
+    payload: D1Client.json(body),
+    status: 'received',
+    created_at: D1Client.now(),
+  })
 
-  // Update recipient status based on event
   const emailId = body.data?.email_id
   if (emailId) {
     const statusMap: Record<string, string> = {
@@ -909,22 +881,131 @@ app.post('/api/webhook/resend', async (c) => {
       'email.bounced': 'failed',
       'email.clicked': 'clicked',
     }
-    await supabase
-      .from('campaign_recipients')
-      .update({ status: statusMap[body.type] || 'sent' })
-      .eq('external_id', emailId)
+    await db.run(
+      `UPDATE campaign_recipients SET status = ?, updated_at = ? WHERE external_id = ?`,
+      [statusMap[body.type] || 'sent', D1Client.now(), emailId]
+    )
   }
 
-  await supabase
-    .from('webhook_logs')
-    .update({ status: 'processed' })
-    .eq('source', 'resend')
-    .eq('payload->data->email_id', emailId)
+  await db.run(
+    `UPDATE webhook_logs SET status = 'processed' WHERE source = 'resend' AND json_extract(payload, '$.data.email_id') = ?`,
+    [emailId]
+  )
 
   return c.json({ received: true })
 })
 
-// Import verification functions
+// Clerk webhook - sync users and organizations
+app.post('/api/webhook/clerk', async (c) => {
+  const body = await c.req.json()
+  const db = getDB(c)
+
+  // Log webhook
+  await db.insert('webhook_logs', {
+    id: D1Client.uuid(),
+    organization_id: null,
+    source: 'clerk',
+    event_type: body.type,
+    payload: D1Client.json(body),
+    status: 'received',
+    created_at: D1Client.now(),
+  })
+
+  try {
+    const { type, data } = body
+
+    if (type === 'user.created' || type === 'user.updated') {
+      const clerkUser = data
+      const existing = await db.getUserByClerkId(clerkUser.id)
+      
+      if (existing) {
+        await db.update('users', existing.id, {
+          email: clerkUser.email_addresses?.[0]?.email_address || null,
+          raw_json: D1Client.json(clerkUser),
+          updated_at: D1Client.now(),
+        })
+      } else {
+        await db.insert('users', {
+          id: D1Client.uuid(),
+          clerk_id: clerkUser.id,
+          organization_id: null, // Will be set when they join an org
+          email: clerkUser.email_addresses?.[0]?.email_address || null,
+          role: 'member',
+          raw_json: D1Client.json(clerkUser),
+          created_at: D1Client.now(),
+          updated_at: D1Client.now(),
+        })
+      }
+    } else if (type === 'organization.created' || type === 'organization.updated') {
+      const clerkOrg = data
+      const existing = await db.getOrganizationByClerkId(clerkOrg.id)
+      
+      if (existing) {
+        await db.update('organizations', existing.id, {
+          name: clerkOrg.name,
+          stripe_customer_id: clerkOrg.stripe_customer_id || null,
+          raw_json: D1Client.json(clerkOrg),
+          updated_at: D1Client.now(),
+        })
+      } else {
+        await db.insert('organizations', {
+          id: D1Client.uuid(),
+          name: clerkOrg.name,
+          clerk_org_id: clerkOrg.id,
+          stripe_customer_id: clerkOrg.stripe_customer_id || null,
+          settings: '{}',
+          created_at: D1Client.now(),
+          updated_at: D1Client.now(),
+        })
+      }
+    } else if (type === 'organizationMembership.created' || type === 'organizationMembership.updated') {
+      const membership = data
+      const user = await db.getUserByClerkId(membership.public_user_data.user_id)
+      if (user) {
+        await db.update('users', user.id, {
+          organization_id: membership.organization.id,
+          role: membership.role === 'admin' ? 'admin' : 'member',
+          updated_at: D1Client.now(),
+        })
+      }
+    }
+
+    await db.run(
+      `UPDATE webhook_logs SET status = 'processed' WHERE source = 'clerk' AND json_extract(payload, '$.data.id') = ?`,
+      [data.id]
+    )
+  } catch (err) {
+    console.error('Clerk webhook error:', err)
+    await db.run(
+      `UPDATE webhook_logs SET status = 'failed', error_message = ? WHERE source = 'clerk' AND json_extract(payload, '$.data.id') = ?`,
+      [(err as Error).message, data.id]
+    )
+  }
+
+  return c.json({ received: true })
+})
+
+// Stripe webhook (for subscription updates)
+app.post('/api/webhook/stripe', async (c) => {
+  const body = await c.req.text()
+  const signature = c.req.header('Stripe-Signature') || ''
+  const db = getDB(c)
+
+  await db.insert('webhook_logs', {
+    id: D1Client.uuid(),
+    organization_id: null,
+    source: 'stripe',
+    event_type: 'event',
+    payload: body,
+    status: 'received',
+    created_at: D1Client.now(),
+  })
+
+  // TODO: Verify Stripe signature and handle events
+  // For now just acknowledge
+  return c.json({ received: true })
+})
+
 function verifyTwilioSignature(
   env: Pick<Env, 'TWILIO_WEBHOOK_SECRET'>,
   url: string,

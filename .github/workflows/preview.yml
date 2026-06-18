@@ -1,0 +1,110 @@
+name: Preview Deploy
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+env:
+  TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
+  TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
+
+jobs:
+  build-and-preview-frontend:
+    name: Build & Preview Frontend
+    runs-on: ubuntu-latest
+    if: github.actor != 'dependabot[bot]'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v3
+        with:
+          version: 9
+          run_install: false
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build frontend
+        working-directory: ./apps/web
+        run: pnpm build:cloudflare
+        env:
+          NEXT_PUBLIC_APP_URL: ${{ secrets.NEXT_PUBLIC_APP_URL }}
+          NEXT_PUBLIC_API_URL: ${{ secrets.NEXT_PUBLIC_API_URL }}
+          NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ secrets.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY }}
+
+      - name: Deploy to Cloudflare Pages Preview
+        uses: cloudflare/pages-action@v1
+        with:
+          apiToken: ${{ secrets.CF_API_TOKEN }}
+          accountId: ${{ secrets.CF_ACCOUNT_ID }}
+          projectName: reviewflow-frontend
+          directory: apps/web/dist
+          branch: preview-${{ github.event.number }}
+          wranglerVersion: '3'
+
+      - name: Comment PR with preview URL
+        uses: thollender/CommentPR@v2
+        with:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          message: |
+            🔗 **Preview Deployment Ready**
+            
+            Frontend: https://preview-${{ github.event.number }}.reviewflow-frontend.pages.dev
+            
+            This preview will update automatically with new commits to this PR.
+
+  build-and-preview-api:
+    name: Build & Preview API
+    runs-on: ubuntu-latest
+    if: github.actor != 'dependabot[bot]'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v3
+        with:
+          version: 9
+          run_install: false
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        working-directory: ./apps/api
+        run: pnpm install --frozen-lockfile
+
+      - name: Build API
+        working-directory: ./apps/api
+        run: pnpm build
+        env:
+          CF_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
+          CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+          CLERK_SECRET_KEY: ${{ secrets.CLERK_SECRET_KEY }}
+          GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
+          GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+          ENCRYPTION_KEY: ${{ secrets.ENCRYPTION_KEY }}
+
+      - name: Deploy API Preview (dry-run)
+        working-directory: ./apps/api
+        run: |
+          wrangler deploy --dry-run \
+            --env preview-${{ github.event.number }} \
+            --var CLERK_SECRET_KEY:${{ secrets.CLERK_SECRET_KEY }} \
+            --var GOOGLE_CLIENT_ID:${{ secrets.GOOGLE_CLIENT_ID }} \
+            --var GOOGLE_CLIENT_SECRET:${{ secrets.GOOGLE_CLIENT_SECRET }} \
+            --var ENCRYPTION_KEY:${{ secrets.ENCRYPTION_KEY }}
+        env:
+          CF_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
+          CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}

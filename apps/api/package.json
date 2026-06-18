@@ -16,9 +16,11 @@
     "hono": "catalog:",
     "@hono/clerk-auth": "catalog:",
     "@hono/zod-validator": "catalog:",
-    "@supabase/supabase-js": "catalog:",
     "@saas/config": "*",
-    "@saas/db": "*",
+    "@saas/db-d1": "*",
+    "@saas/google": "*",
+    "@saas/communications": "*",
+    "@saas/storage": "*",
     "zod": "catalog:"
   },
   "devDependencies": {

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Production deployment script
-# Supports both Cloudflare Pages and Vercel for frontend
+# Production deployment script for ReviewFlow (D1 + Cloudflare Workers + Cloudflare Pages)
+# Supports Cloudflare Pages for frontend, D1 for database
 
 set -e
 
@@ -12,8 +12,6 @@ echo "🚀 Deploying to production (target: $DEPLOY_TARGET)..."
 required_secrets=(
   "CF_API_TOKEN"
   "CF_ACCOUNT_ID"
-  "SUPABASE_ACCESS_TOKEN"
-  "SUPABASE_PROJECT_REF"
 )
 
 # Vercel-specific secrets
@@ -60,11 +58,15 @@ elif [ "$DEPLOY_TARGET" = "vercel" ]; then
   cd ../..
 fi
 
-# Run migrations
-echo "🗄️ Running Supabase migrations..."
-cd packages/db
-npx supabase db push --linked
-cd ../..
+# Run D1 migrations
+echo "🗄️ Running D1 migrations..."
+for file in packages/db/d1/migrations/*.sql; do
+  echo "Applying $file..."
+  wrangler d1 execute reviewflow-db --remote --file="$file"
+done
+
+# Generate types (optional - currently manual)
+echo "🔧 Type generation: types are maintained manually in packages/db-d1/src/types.ts"
 
 echo "✅ Deployment complete!"
 if [ "$DEPLOY_TARGET" = "cloudflare-pages" ]; then
@@ -72,4 +74,6 @@ if [ "$DEPLOY_TARGET" = "cloudflare-pages" ]; then
 else
   echo "   Frontend: https://${VERCEL_PROJECT_ID}.vercel.app"
 fi
-echo "   API: https://saas-api.${CF_ACCOUNT_ID}.workers.dev"
+echo "   API: https://reviewflow-api.${CF_ACCOUNT_ID}.workers.dev"
+echo "   D1 Database: reviewflow-db"
+echo "   R2 Bucket: reviewflow-assets"

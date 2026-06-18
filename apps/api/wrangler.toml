@@ -1,4 +1,4 @@
-name = "saas-api"
+name = "reviewflow-api"
 main = "src/index.ts"
 compatibility_date = "2024-06-17"
 compatibility_flags = ["nodejs_compat"]
@@ -6,11 +6,30 @@ compatibility_flags = ["nodejs_compat"]
 [vars]
 NODE_ENV = "production"
 
+# D1 Database binding
+[[d1_databases]]
+binding = "DB"
+database_name = "reviewflow-db"
+database_id = "your-database-id-here"
+
+# R2 Bucket binding for file storage
+[[r2_buckets]]
+binding = "REVIEWFLOW_BUCKET"
+bucket_name = "reviewflow-assets"
+
 # Secrets set via: wrangler secret put <NAME>
 # CLERK_SECRET_KEY
 # CLERK_JWKS_URL
-# SUPABASE_URL
-# SUPABASE_SERVICE_ROLE_KEY
-# DATABASE_URL
+# GOOGLE_CLIENT_ID
+# GOOGLE_CLIENT_SECRET
+# GOOGLE_REDIRECT_URI
+# ENCRYPTION_KEY
+# TWILIO_ACCOUNT_SID
+# TWILIO_AUTH_TOKEN
+# TWILIO_WEBHOOK_SECRET
+# TWILIO_PHONE_NUMBER
+# RESEND_API_KEY
+# RESEND_WEBHOOK_SECRET
 # STRIPE_SECRET_KEY
 # STRIPE_WEBHOOK_SECRET
+# CLERK_WEBHOOK_SECRET

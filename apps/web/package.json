@@ -14,11 +14,8 @@
   },
   "dependencies": {
     "@clerk/nextjs": "catalog:",
-    "@supabase/ssr": "catalog:",
-    "@supabase/supabase-js": "catalog:",
     "@tanstack/react-query": "catalog:",
     "@saas/config": "*",
-    "@saas/db": "*",
     "@saas/ui": "*",
     "next": "catalog:",
     "react": "catalog:",
