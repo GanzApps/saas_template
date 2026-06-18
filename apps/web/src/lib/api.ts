@@ -13,16 +13,16 @@ export type FilesPage = {
   nextCursor: string | null
 }
 
-async function authedFetch(path: string, init: RequestInit = {}, token?: string) {
+async function authedFetch<T>(path: string, init: RequestInit = {}, token?: string): Promise<T> {
   const headers = new Headers(init.headers)
   headers.set('Content-Type', 'application/json')
   if (token) headers.set('Authorization', `Bearer ${token}`)
   const res = await fetch(`${API_URL}${path}`, { ...init, headers })
   if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: res.statusText }))
+    const err = (await res.json().catch(() => ({ error: res.statusText }))) as { error?: string }
     throw new Error(err.error || `Request failed: ${res.status}`)
   }
-  return res.json()
+  return res.json() as Promise<T>
 }
 
 export async function listFiles(cursor?: string, token?: string): Promise<FilesPage> {

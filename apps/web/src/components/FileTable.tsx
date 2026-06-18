@@ -54,7 +54,7 @@ export function FileTable() {
   const handleDownload = async (id: string) => {
     const token = await getToken() ?? ''
     const { downloadUrl } = await presignDownload(id, token)
-    window.open(downloadUrl, '_blank')
+    if (typeof window !== 'undefined') window.open(downloadUrl, '_blank')
   }
 
   if (isLoading) return <div>Loading…</div>
@@ -138,7 +138,7 @@ function UploadZone({
         type="file"
         multiple
         className="hidden"
-        onChange={(e) => {
+        onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
           const files = Array.from(e.target.files ?? [])
           files.forEach(onPick)
           e.target.value = ''
@@ -185,7 +185,7 @@ function ShareModal({ file, onClose }: { file: FileItem; onClose: () => void }) 
               <input
                 className="mt-1 w-full border rounded px-2 py-1"
                 value={expiresIn}
-                onChange={(e) => setExpiresIn(e.target.value)}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setExpiresIn(e.target.value)}
                 placeholder="24 (blank = never)"
               />
             </label>
@@ -194,7 +194,7 @@ function ShareModal({ file, onClose }: { file: FileItem; onClose: () => void }) 
               <input
                 className="mt-1 w-full border rounded px-2 py-1"
                 value={maxDownloads}
-                onChange={(e) => setMaxDownloads(e.target.value)}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setMaxDownloads(e.target.value)}
                 placeholder="Unlimited"
               />
             </label>
@@ -211,7 +211,7 @@ function ShareModal({ file, onClose }: { file: FileItem; onClose: () => void }) 
           <>
             <div className="border rounded px-3 py-2 text-sm break-all bg-muted">{shareUrl}</div>
             <div className="flex justify-end gap-2">
-              <Button variant="ghost" onClick={() => navigator.clipboard.writeText(shareUrl)}>
+              <Button variant="ghost" onClick={() => (typeof navigator !== 'undefined' && navigator.clipboard.writeText(shareUrl))}>
                 Copy
               </Button>
               <Button onClick={onClose}>Done</Button>

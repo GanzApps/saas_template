@@ -58,8 +58,12 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Run typecheck
-        run: pnpm typecheck
+      - name: Typecheck API
+        run: pnpm --filter @saas/api typecheck
+      - name: Typecheck Web
+        run: pnpm --filter @saas/web typecheck
+      - name: Typecheck Packages
+        run: pnpm --filter @saas/db-d1 --filter @saas/storage --filter @saas/config --filter @saas/ui typecheck
 
   test:
     name: Test

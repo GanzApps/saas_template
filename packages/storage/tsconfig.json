@@ -4,8 +4,8 @@
     "outDir": "dist",
     "declaration": true,
     "emitDeclarationOnly": true,
-    "lib": ["ES2022", "DOM", "DOM.Iterable"],
-    "jsx": "react-jsx"
+    "lib": ["ES2022", "DOM"],
+    "jsx": "preserve"
   },
   "include": ["src/**/*"],
   "exclude": ["node_modules", "dist"]

@@ -1,5 +1,5 @@
 {
-  "extends": "@saas/tsconfig/base.json",
+  "extends": "../../packages/tsconfig/base.json",
   "compilerOptions": {
     "outDir": "dist",
     "declaration": true,
