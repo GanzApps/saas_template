@@ -6,8 +6,8 @@ import '@saas/ui/globals.css'
 const inter = Inter({ subsets: ['latin'], variable: '--font-inter' })
 
 export const metadata: Metadata = {
-  title: 'FileVault',
-  description: 'Secure file sharing for teams. Built on Cloudflare R2 + D1.',
+  title: 'ReviewFlow',
+  description: 'Google Business review management for teams.',
   metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'),
 }
 

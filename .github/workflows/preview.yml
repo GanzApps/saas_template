@@ -34,8 +34,9 @@ jobs:
 
       - name: Build frontend
         working-directory: ./apps/web
-        run: pnpm build:cloudflare
+        run: pnpm build
         env:
+          DEPLOY_TARGET: cloudflare-pages
           NEXT_PUBLIC_APP_URL: ${{ secrets.NEXT_PUBLIC_APP_URL }}
           NEXT_PUBLIC_API_URL: ${{ secrets.NEXT_PUBLIC_API_URL }}
           NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ secrets.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY }}
@@ -45,8 +46,8 @@ jobs:
         with:
           apiToken: ${{ secrets.CF_API_TOKEN }}
           accountId: ${{ secrets.CF_ACCOUNT_ID }}
-          projectName: filevault-frontend
-          directory: apps/web/dist
+          projectName: saas-template
+          directory: apps/web/out
           branch: preview-${{ github.event.number }}
           wranglerVersion: '3'
 
@@ -57,7 +58,7 @@ jobs:
           message: |
             🔗 **Preview Deployment Ready**
             
-            Frontend: https://preview-${{ github.event.number }}.filevault-frontend.pages.dev
+            Frontend: https://preview-${{ github.event.number }}.saas-template.pages.dev
             
             This preview will update automatically with new commits to this PR.
 
